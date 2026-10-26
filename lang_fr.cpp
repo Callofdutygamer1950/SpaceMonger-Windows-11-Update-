@@ -63,7 +63,7 @@ Lang LangFr = {
 	L"Auto-Rouvrir à Effacer", L"Pas de Command «Effacer»",
 	L"Vrombir Animé", L"Souvenir Position du Window",
 	L"Montrer les Boites «Rollovers»",
-	L"Properties...",
+	L"Propriétés...",
 	frtoolbarnames,
 	L"To",
 	L"Afficher dans l'&Explorateur",

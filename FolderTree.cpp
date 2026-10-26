@@ -99,6 +99,12 @@ BOOL CFolderTree::LoadTree(const CString &path, BOOL includespace, CWnd *modalwi
 	CString scanpath = (len > 0 && len < 32768) ? CString(fullpath) : path;
 	if (scanpath.Right(1) != L"\\") scanpath += L"\\";
 
+	// Remember what is showing now, in case this scan is cancelled.
+	CString oldpath = m_path;
+	ui64 oldfree = freespace, oldused = usedspace, oldtotal = totalspace;
+	ui64 oldcluster = clustersize;
+	BOOL oldhardlinks = hardlinks;
+
 	m_path = scanpath;
 	GetSpace(scanpath);
 
@@ -148,6 +154,10 @@ BOOL CFolderTree::LoadTree(const CString &path, BOOL includespace, CWnd *modalwi
 
 	if (state.cancelled || !keepgoing) {
 		delete newroot;
+		m_path = oldpath;
+		freespace = oldfree, usedspace = oldused, totalspace = oldtotal;
+		clustersize = oldcluster;
+		hardlinks = oldhardlinks;
 		dialog.state = NULL;
 		if (::IsWindow(dialog.m_hWnd)) dialog.DestroyWindow();
 		return 0;

@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "spacemonger.h"
 #include "DriveDialog.h"
+#include "FolderTree.h"
 #include "Lang.h"
 
 CDriveDialog::CDriveDialog(CWnd* pParent)
@@ -130,8 +131,20 @@ BOOL CDriveDialog::OnInitDialog()
 		item.lParam = i;
 		lc->InsertItem(&item);
 	}
-	if (lc->GetItemCount() > 0)
-		lc->SetItemState(0, LVIS_SELECTED|LVIS_FOCUSED, LVIS_SELECTED|LVIS_FOCUSED);
+	// Start on the drive being viewed now, or C: if nothing is open.
+	CFolderTree *ft = (CFolderTree *)theApp.m_document;
+	int current = 2;
+	if (ft != NULL && ft->m_path.GetLength() >= 2 && ft->m_path[1] == L':')
+		current = towupper(ft->m_path[0]) - L'A';
+	LVFINDINFO find;
+	find.flags = LVFI_PARAM;
+	find.lParam = current;
+	int item = lc->FindItem(&find);
+	if (item < 0 && lc->GetItemCount() > 0) item = 0;
+	if (item >= 0) {
+		lc->SetItemState(item, LVIS_SELECTED|LVIS_FOCUSED, LVIS_SELECTED|LVIS_FOCUSED);
+		lc->EnsureVisible(item, FALSE);
+	}
 
 	Theme_ApplyToWindow(m_hWnd);
 	lc->SetFocus();

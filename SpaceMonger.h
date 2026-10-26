@@ -80,6 +80,7 @@ public:
 
 public:
 	void OpenPath(const CString &path);
+	void ScanPath(CString path);
 	void ApplyTheme(void);
 
 	CFrameWnd *m_mainframe;

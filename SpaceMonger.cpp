@@ -146,11 +146,7 @@ void CSpaceMonger::ApplyTheme(void)
 
 void CSpaceMonger::OpenPath(const CString &path)
 {
-	CFolderTree *ft = (CFolderTree *)m_document;
-	CString oldpath = ft->m_path;
-	ft->m_path = path;
-	OnFileRefresh();
-	if (ft->GetRoot() == NULL) ft->m_path = oldpath;
+	ScanPath(path);
 }
 
 void CSpaceMonger::OnFileOpen(void)
@@ -198,12 +194,19 @@ void CSpaceMonger::OnFileOpenFolder(void)
 void CSpaceMonger::OnFileRefresh(void)
 {
 	CFolderTree *ft = (CFolderTree *)m_document;
-	if (ft->m_path.IsEmpty()) return;
+	ScanPath(ft->m_path);
+}
+
+// Scans a drive or folder.  If the scan is cancelled, whatever was showing
+// before stays exactly as it was.
+void CSpaceMonger::ScanPath(CString path)
+{
+	CFolderTree *ft = (CFolderTree *)m_document;
+	if (path.IsEmpty()) return;
 
 	m_mainframe->EnableWindow(0);
 
-	((CFolderView *)m_view)->zoomlevel = 0;
-	if (ft->LoadTree(ft->m_path, 1, m_mainframe)) {
+	if (ft->LoadTree(path, 1, m_mainframe)) {
 		// Only throw away the old picture once the new scan is done, so
 		// that cancelling a rescan leaves the old one in place.
 		m_view->SetDocument(NULL);
