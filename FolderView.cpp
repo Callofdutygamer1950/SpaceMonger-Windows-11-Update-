@@ -909,9 +909,8 @@ void CFolderView::SetPalette(void)
 
 void CFolderView::OnUpdate(CFreeDoc *doc)
 {
+	OnSize(0, m_width, m_height);	// Rebuilds the layout and clears the selection
 	UpdateTitleBar();
-
-	OnSize(0, m_width, m_height);
 	Redraw();
 
 	m_infotipwnd.SetShowDelay(theApp.m_settings.infotip_delay);
