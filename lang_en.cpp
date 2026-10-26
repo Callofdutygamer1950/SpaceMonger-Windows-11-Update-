@@ -82,7 +82,7 @@ Lang LangUs = {
 		L" for this program's behavior.  There are no warranties of any"
 		L" kind, expressed or implied, on this product.",
 	L"Have questions?  Found a bug?  Want a feature?\n"
-		L"E-mail to <sean@werkema.com>.",
+		L"E-mail to <JoeysItSupport@gmail.com>.",
 	L"OK", L"Cancel",
 	L"bytes", L"KB", L"MB", L"GB",
 	L"<Free Space: %d.%d%%>",
@@ -136,7 +136,7 @@ Lang LangUk = {
 		L" for this program's behavior.  There are no warranties of any"
 		L" kind, expressed or implied, on this product.",
 	L"Have questions?  Found a bug?  Want a feature?\n"
-		L"E-mail to <sean@werkema.com>.",
+		L"E-mail to <JoeysItSupport@gmail.com>.",
 	L"OK", L"Cancel",
 	L"bytes", L"KB", L"MB", L"GB",
 	L"<Free Space: %d.%d%%>",

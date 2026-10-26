@@ -71,7 +71,7 @@ Lang LangFr = {
 		L" for this program's behavior.  There are no warranties of any"
 		L" kind, expressed or implied, on this product.»",
 	L"Vous avez des questions?  Trouvez un «bug»?  Voudriez quelque-chose?  "
-		L"Envoyez e-mail à «sean@werkema.com».",
+		L"Envoyez e-mail à «JoeysItSupport@gmail.com».",
 	L"D'accord", L"Annul",
 	L"octets", L"Ko", L"Mo", L"Go",
 	L"<l'Espace Libre: %d,%d%%>",
