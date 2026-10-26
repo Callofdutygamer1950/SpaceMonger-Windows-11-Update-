@@ -26,21 +26,23 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // Dialog
 //
 
-IDD_ABOUT DIALOGEX 0, 0, 239, 145
+IDD_ABOUT DIALOGEX 0, 0, 239, 154
 STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE |
     WS_CAPTION | WS_SYSMENU
 FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    DEFPUSHBUTTON   "",IDOK,94,124,50,14
+    DEFPUSHBUTTON   "",IDOK,94,133,50,14
     ICON            ID_SPACEMONGER,IDC_STATIC,7,9,20,20
-    LTEXT           "SpaceMonger Version 1.5.0 (Windows 11 update)",IDC_STATIC,37,9,195,10
-    LTEXT           "Copyright © 1998, 1999, 2000 by Sean Werkema",
-                    IDC_STATIC,37,18,195,8
-    LTEXT           "",IDC_STATIC_FREEWARE,37,41,195,10
-    LTEXT           "",IDC_STATIC_WARRANTY,37,55,195,34
-    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,37,34,195,1
-    LTEXT           "",IDC_STATIC_EMAIL,37,93,195,18
-    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,37,115,195,1
+    LTEXT           "SpaceMonger Version 1.5.0 (Windows 11 update)",IDC_STATIC,37,7,195,9
+    LTEXT           "Windows 11 update © 2026 Joey's IT Support",
+                    IDC_STATIC,37,17,195,9
+    LTEXT           "Original SpaceMonger © 1998-2000 Sean Werkema",
+                    IDC_STATIC,37,26,195,9
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,37,39,195,1
+    LTEXT           "",IDC_STATIC_FREEWARE,37,45,195,10
+    LTEXT           "",IDC_STATIC_WARRANTY,37,58,195,42
+    LTEXT           "",IDC_STATIC_EMAIL,37,102,195,18
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,37,124,195,1
 END
 
 IDD_OPEN_DIALOG DIALOGEX 0, 0, 221, 170
@@ -284,7 +286,7 @@ BEGIN
             VALUE "FileDescription", "SpaceMonger Program File\0"
             VALUE "FileVersion", "1, 5, 0, 0\0"
             VALUE "InternalName", "SpaceMonger\0"
-            VALUE "LegalCopyright", "Copyright © 1997-2000 Sean Werkema\0"
+            VALUE "LegalCopyright", "Copyright © 1997-2000 Sean Werkema; Windows 11 update © 2026 Joey's IT Support\0"
             VALUE "LegalTrademarks", "\0"
             VALUE "OriginalFilename", "SpaceMonger.exe\0"
             VALUE "PrivateBuild", "\0"
