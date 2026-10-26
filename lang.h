@@ -2,6 +2,32 @@
 #ifndef LANG_H
 #define LANG_H
 
+// Text added after 1.5's first release lives here, so that the big
+// positional Lang tables don't keep growing.
+struct LangExtra {
+	const wchar_t *largesttitle;	// "Largest Files" window title
+	const wchar_t *largestintro;	// %s = folder being viewed
+	const wchar_t *exceptionsintro;
+	const wchar_t *colname, *colsize, *colfolder, *colmodified;
+	const wchar_t *gotofile, *addexception, *removeexception, *showexceptions, *close;
+	const wchar_t *nofiles;
+	const wchar_t *hiddenformat;	// "<...: %d.%d%%>"
+	const wchar_t *hiddennote;
+	const wchar_t *hiddenadmin;
+	const wchar_t *runasadmin;		// Context menu
+	const wchar_t *exportcsv;		// Context menu
+	const wchar_t *exporttitle;		// Save dialog title
+	const wchar_t *exportmany;		// %s = row count
+	const wchar_t *exportfailed;
+	const wchar_t *exportdone;		// %s = row count, %s = file
+	const wchar_t *searchcue;
+	const wchar_t *searchmatches;	// %s = count, %s = size
+	const wchar_t *searchmatch;		// Same, for exactly one match
+	const wchar_t *searchnone;
+	const wchar_t **typenames;		// File-type categories, see FileTypes.h
+	const wchar_t *openfailed;		// %s = path
+};
+
 struct Lang {
 	int toolbar_bitmap_id;
 	const wchar_t *about_spacemonger;
@@ -35,7 +61,7 @@ struct Lang {
 
 	// Added in 1.5 (Windows 11 update)
 	const wchar_t **toolbarnames;	// Open, Reload, Zoom Full, Zoom In, Zoom Out,
-									// Free Space, Run, Delete, Setup, About
+									// Free Space, Run, Delete, Setup, About, Largest
 	const wchar_t *tb;
 	const wchar_t *showinexplorer;
 	const wchar_t *openfolder;		// Context menu: open a folder to scan
@@ -48,6 +74,7 @@ struct Lang {
 	const wchar_t *theme;
 	const wchar_t **themenames;		// System, Light, Dark
 	const wchar_t *scanningfolder;
+	const LangExtra *ex;
 };
 
 struct LangEntry {

@@ -249,7 +249,7 @@ void CSettingsDialog::UpdateDialogForNewLanguage(void)
 		density->SetCurSel(theApp.m_settings.density+3);
 	}
 	if (file_color != NULL) {
-		for (i = 0; i < 12; i++)
+		for (i = 0; i < 13; i++)		// Includes "By File Type"
 			file_color->AddString(CurLang->colornames[i]);
 		file_color->SetCurSel(theApp.m_settings.file_color);
 	}

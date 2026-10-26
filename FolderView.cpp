@@ -4,6 +4,7 @@
 #include "MainFrm.h"
 #include "TipWnd.h"
 #include "Lang.h"
+#include "FileTypes.h"
 
 IMPLEMENT_DYNCREATE(CFolderView, CFreeView)
 
@@ -109,6 +110,7 @@ CFolderView::CFolderView()
 	zoomlevel = 0;
 	showfreespace = 1;
 	lastcur = NULL;
+	m_searchext = 0;
 	m_dpi = 96;
 	m_border = 3;
 	m_line = 12;
@@ -562,7 +564,10 @@ void CFolderView::OnRButtonUp(UINT flags, CPoint point)
 	::AddMenuEntry(menu, ID_FILE_OPEN_FOLDER, CurLang->openfolder, 0, 0, 0);
 	::AddMenuEntry(menu, ID_FILE_REFRESH, CurLang->rescandrive, 0, rootfolder == NULL, 0);
 	::AddMenuEntry(menu, ID_VIEW_FREE, CurLang->showfreespace, showfreespace, rootfolder == NULL, 0);
+	if (!theApp.IsElevated())
+		::AddMenuEntry(menu, ID_FILE_RUNASADMIN, CurLang->ex->runasadmin, 0, rootfolder == NULL, 0);
 	::AddMenuEntry(menu);
+	::AddMenuEntry(menu, ID_FILE_EXPORT, CurLang->ex->exportcsv, 0, rootfolder == NULL, 0);
 	::AddMenuEntry(menu, ID_FILE_PROPERTIES, CurLang->properties, 0, cur == NULL, 0);
 	::TrackPopupMenuEx(menu, TPM_LEFTALIGN|TPM_LEFTBUTTON|TPM_RIGHTBUTTON,
 		point.x, point.y, theApp.m_mainframe->m_hWnd, NULL);
@@ -619,6 +624,16 @@ static CString GetSizeString(ui64 size, ui64 totalspace, BOOL percent)
 	}
 
 	return result;
+}
+
+CString FormatSizeText(ui64 size)
+{
+	return GetSizeString(size, 0, 0);
+}
+
+CString FormatCountText(ui64 value)
+{
+	return FormatCount(value);
 }
 
 // Percentages are of the whole disk, or of the folder when scanning a folder.
@@ -779,6 +794,12 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 				bright = Theme_Color(COLOR_3DHILIGHT);
 				dark = Theme_Color(COLOR_3DSHADOW);
 			}
+			else if (colortype == FILE_COLOR_BY_TYPE) {
+				int type = GetFileType(cur->name);
+				color = GetFileTypeColor(type, 0);
+				bright = GetFileTypeColor(type, 1);
+				dark = GetFileTypeColor(type, 2);
+			}
 			else {
 				color = FixedColors[colortype-2];
 				bright = FixedColors[colortype-2 + 10];
@@ -792,6 +813,16 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 				color = ThemeBoxColor(color);
 				bright = ThemeBoxColor(bright);
 				dark = ThemeBoxColor(dark);
+			}
+			// While searching, matching files light up in a highlight color,
+			// and everything else fades into the background.
+			if (IsSearching() && !(cur->flags & 1) && cur->name != NULL) {
+				if (!MatchesSearch(cur->name))
+					color = bright = dark = Theme_IsDark() ? RGB(0x26, 0x26, 0x26) : RGB(0xE6, 0xE6, 0xE6);
+				else if (Theme_IsDark())
+					color = RGB(0x00, 0x67, 0xC0), bright = RGB(0x4C, 0xA0, 0xE8), dark = RGB(0x00, 0x48, 0x88);
+				else
+					color = RGB(0xFF, 0xC8, 0x3D), bright = RGB(0xFF, 0xE4, 0x9A), dark = RGB(0xC8, 0x92, 0x00);
 			}
 		}
 		else color = bright = dark = Theme_Color(COLOR_3DFACE);
@@ -808,6 +839,18 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 			FillBox(pDC->m_hDC, brush, x + B, y + B, w - B * 2, m_line);
 		}
 		else FillBox(pDC->m_hDC, brush, x + 2, y + 2, w - 4, h - 4);
+
+		if (cur->flags & 16) {
+			// Hidden space gets diagonal stripes, to set it apart from free space.
+			CBrush hatch(HS_BDIAGONAL, Theme_IsDark() ? RGB(0x50, 0x50, 0x50) : RGB(0xB8, 0xB8, 0xB8));
+			// Paint the gaps between stripes in the block's own color.
+			int oldmode = pDC->SetBkMode(OPAQUE);
+			COLORREF oldbk = pDC->SetBkColor(color);
+			RECT r = { x + 2, y + 2, x + w - 2, y + h - 2 };
+			::FillRect(pDC->m_hDC, &r, hatch);
+			pDC->SetBkColor(oldbk);
+			pDC->SetBkMode(oldmode);
+		}
 	}
 
 	if (cur->name != NULL) {
@@ -828,7 +871,23 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 		pDC->SetTextColor((sel && !(cur->flags & 2)) ? ThemeSelectedTextColor() : ThemeBoxTextColor());
 		if (cur->flags & 2) pDC->SetTextColor(Theme_Color(COLOR_WINDOWTEXT));
 
-		if (cur->flags & 2) {
+		if (cur->flags & 16) {
+			CFolderTree *ft = (CFolderTree *)GetDocument();
+			ui64 ts = ft->totalspace;
+			if (ts <= 1) ts = 1;
+			si32 percent = (si32)(ft->hiddenspace * (ui64)1000 / ts);
+			CString lines[4];
+			lines[0].Format(CurLang->ex->hiddenformat, percent / 10, percent % 10);
+			lines[1] = GetSizeString(ft->hiddenspace, ts, 0);
+			lines[2] = CurLang->ex->hiddennote;
+			if (!theApp.IsElevated()) lines[3] = CurLang->ex->hiddenadmin;
+			int top = y + h / 2 - m_line * 2;
+			for (int i = 0; i < 4; i++) {
+				size = pDC->GetTextExtent(lines[i]);
+				pDC->TextOut((size.cx > w - 2) ? x + 2 : x + (w - size.cx) / 2, top + m_line * i, lines[i]);
+			}
+		}
+		else if (cur->flags & 2) {
 			// There's only one free-space block, so we can afford to
 			// be a little less efficient with it.
 			CFolderTree *ft = (CFolderTree *)GetDocument();
@@ -941,8 +1000,10 @@ CDisplayFolder *CFolderView::AddDisplayFolder(CFolder *source, ui32 index,
 	}
 	else newfolder->name = NULL, c = 0;
 
-	if (c == L'<')
+	if (c == L'<') {
 		newfolder->depth = -1, flags |= 2;
+		if (!wcscmp(newfolder->name, HIDDEN_SPACE_NAME)) flags |= 16;
+	}
 	else newfolder->depth = depth;
 
 	newfolder->flags = flags;
@@ -1021,7 +1082,7 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 
 	for (largest = 0; largest < numindices; largest++) {
 		bignum = (si64)folder->sizes[index[largest]];
-		if (folder->names[index[largest]][0] == L'<' && !showfreespace)
+		if (!showfreespace && !wcscmp(folder->names[index[largest]], FREE_SPACE_NAME))
 			bignum = 0;
 		if (bignum != 0) {
 			if (list1sum <= list2sum) {
@@ -1248,6 +1309,68 @@ void CFolderView::AnimateZoom(CBitmap &oldpicture, const CRect &box, BOOL zoomin
 	olddc.SelectObject(oldsel1);
 	if (oldsel2 != NULL) newdc.SelectObject(oldsel2);
 	backdc.SelectObject(oldsel3);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//  Search
+
+BOOL CFolderView::MatchesSearch(const wchar_t *name) const
+{
+	if (m_search.IsEmpty()) return 1;
+	if (m_searchext) {
+		size_t namelen = wcslen(name), extlen = m_search.GetLength();
+		return namelen >= extlen && !_wcsicmp(name + namelen - extlen, m_search);
+	}
+	return StrStrIW(name, m_search) != NULL;
+}
+
+void CFolderView::CountMatches(CFolder *folder, ui64 &matches, ui64 &matchsize) const
+{
+	for (unsigned int i = 0; i < folder->cur; i++) {
+		if (folder->children[i] != NULL)
+			CountMatches(folder->children[i], matches, matchsize);
+		else if (!IsSpecialName(folder->names[i]) && MatchesSearch(folder->names[i])) {
+			matches++;
+			matchsize += folder->sizes[i];
+		}
+	}
+}
+
+void CFolderView::SetSearch(const CString &text, ui64 &matches, ui64 &matchsize)
+{
+	CString search = text;
+	search.Trim();
+	if (search.Left(1) == L"*") search = search.Mid(1);	// "*.mp4" means ".mp4"
+	m_searchext = (search.Left(1) == L"." && search.Find(L' ') < 0);
+	m_search = search;
+
+	matches = matchsize = 0;
+	CFolderTree *ft = (CFolderTree *)GetDocument();
+	if (!m_search.IsEmpty() && ft != NULL && ft->GetRoot() != NULL) {
+		CWaitCursor wait;
+		CountMatches(ft->GetRoot(), matches, matchsize);
+	}
+	Redraw();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void CFolderView::ShowFile(CFolder *folder, unsigned int index)
+{
+	if (folder == NULL || index >= folder->cur) return;
+
+	rootfolder = folder;
+	zoomlevel = 0;
+	for (CFolder *parent = folder->parent; parent != NULL; parent = parent->parent)
+		zoomlevel++;
+	OnUpdate(GetDocument());
+
+	for (CDisplayFolder *cur = displayfolders; cur != NULL; cur = cur->next) {
+		if (cur->source == folder && cur->index == index && cur->name != NULL) {
+			SelectFolder(cur);
+			break;
+		}
+	}
 }
 
 void CFolderView::OnIgnoreUpdate(CCmdUI *ui)

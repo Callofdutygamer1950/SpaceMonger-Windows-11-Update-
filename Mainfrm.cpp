@@ -4,6 +4,7 @@
 #include "FolderView.h"
 #include "AboutDialog.h"
 #include "Lang.h"
+#include "FileTypes.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // CMainFrame
@@ -56,6 +57,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	SetIcon(smallicon, 0);
 
 	if (!m_toolbar.Create(this)) return(-1);
+	if (!m_legend.Create(this)) return(-1);
 
 	CMenu *menu = GetSystemMenu(FALSE);
 	menu->AppendMenu(MF_SEPARATOR);
@@ -124,12 +126,22 @@ void CMainFrame::RecalcLayout(BOOL bNotify)
 		SWP_NOZORDER|SWP_NOACTIVATE);
 	rectBorder.top += toolheight;
 
+	// And the file-type legend, along the bottom, when it's needed
+	if (m_legend.ShouldShow()) {
+		int legendheight = m_legend.GetHeight();
+		rectBorder.bottom -= legendheight;
+		m_legend.SetWindowPos(NULL, 0, rectBorder.bottom, width, legendheight,
+			SWP_NOZORDER|SWP_NOACTIVATE|SWP_SHOWWINDOW);
+		m_legend.Invalidate(FALSE);
+	}
+	else m_legend.ShowWindow(SW_HIDE);
+
 	// First count how many windows need to be rearranged
 	numwnds = 0;
 	if (first != NULL) {
 		wnd = first;
 		while (1) {
-			if (wnd->m_hWnd != m_toolbar.m_hWnd)
+			if (wnd->m_hWnd != m_toolbar.m_hWnd && wnd->m_hWnd != m_legend.m_hWnd)
 				numwnds++;
 			if (wnd == last) break;
 			wnd = wnd->GetWindow(GW_HWNDNEXT);
@@ -140,7 +152,7 @@ void CMainFrame::RecalcLayout(BOOL bNotify)
 	if (first != NULL && numwnds > 0) {
 		wndnum = 0, wnd = first;
 		while (1) {
-			if (wnd->m_hWnd != m_toolbar.m_hWnd) {
+			if (wnd->m_hWnd != m_toolbar.m_hWnd && wnd->m_hWnd != m_legend.m_hWnd) {
 				wnd->SetWindowPos(NULL, rectBorder.left + (width * wndnum) / numwnds, rectBorder.top,
 					(width * (wndnum+1)) / numwnds - (width * wndnum) / numwnds,
 					rectBorder.bottom - rectBorder.top,
@@ -227,30 +239,41 @@ BEGIN_MESSAGE_MAP(CMainToolBar, CWnd)
 	ON_WM_LBUTTONDOWN()
 	ON_WM_LBUTTONUP()
 	ON_WM_DESTROY()
+	ON_WM_SIZE()
+	ON_WM_TIMER()
+	ON_WM_CTLCOLOR()
+	ON_EN_CHANGE(IDC_SEARCH, OnSearchChange)
+	ON_EN_SETFOCUS(IDC_SEARCH, OnSearchFocus)
+	ON_EN_KILLFOCUS(IDC_SEARCH, OnSearchFocus)
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
 CMainToolBar::CMainToolBar()
 {
 	// Glyphs are from the Segoe Fluent Icons / Segoe MDL2 Assets fonts.
-	static const struct { UINT id; wchar_t glyph; BOOL sep; } buttons[] = {
-		{ ID_FILE_OPEN,			0xE838, 0 },	// FolderOpen
-		{ ID_FILE_REFRESH,		0xE72C, 1 },	// Refresh
-		{ ID_VIEW_ZOOM_FULL,	0xE9A6, 0 },	// FitPage
-		{ ID_VIEW_ZOOM_IN,		0xE8A3, 0 },	// ZoomIn
-		{ ID_VIEW_ZOOM_OUT,		0xE71F, 1 },	// ZoomOut
-		{ ID_VIEW_FREE,			0xEDA2, 1 },	// HardDrive
-		{ ID_FILE_RUN,			0xE768, 0 },	// Play
-		{ ID_FILE_DELETE,		0xE74D, 1 },	// Delete
-		{ ID_SETTINGS,			0xE713, 1 },	// Setting
-		{ ID_APP_ABOUT,			0xE946, 0 },	// Info
+	// "label" indexes CurLang->toolbarnames.  When the window is narrow,
+	// labels are dropped in "priority" order, lowest first.
+	static const struct { UINT id; wchar_t glyph; int label; BOOL sep; int priority; } buttons[] = {
+		{ ID_FILE_OPEN,			0xE838, 0, 0, 3 },		// FolderOpen
+		{ ID_FILE_REFRESH,		0xE72C, 1, 1, 3 },		// Refresh
+		{ ID_VIEW_ZOOM_FULL,	0xE9A6, 2, 0, 1 },		// FitPage
+		{ ID_VIEW_ZOOM_IN,		0xE8A3, 3, 0, 1 },		// ZoomIn
+		{ ID_VIEW_ZOOM_OUT,		0xE71F, 4, 1, 1 },		// ZoomOut
+		{ ID_VIEW_FREE,			0xEDA2, 5, 0, 3 },		// HardDrive
+		{ ID_VIEW_LARGEST,		0xE8FD, 10, 1, 3 },		// BulletedList
+		{ ID_FILE_RUN,			0xE768, 6, 0, 2 },		// Play
+		{ ID_FILE_DELETE,		0xE74D, 7, 1, 2 },		// Delete
+		{ ID_SETTINGS,			0xE713, 8, 1, 3 },		// Setting
+		{ ID_APP_ABOUT,			0xE946, 9, 0, 2 },		// Info
 	};
 	for (int i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
 		Button button;
 		button.id = buttons[i].id;
 		button.glyph = buttons[i].glyph;
-		button.label = i;
+		button.label = buttons[i].label;
 		button.separator_after = buttons[i].sep;
+		button.priority = buttons[i].priority;
+		button.showlabel = 1;
 		button.enabled = (button.id == ID_FILE_OPEN || button.id == ID_SETTINGS
 			|| button.id == ID_APP_ABOUT);
 		button.checked = 0;
@@ -259,6 +282,7 @@ CMainToolBar::CMainToolBar()
 	m_height = 32;
 	m_hot = m_pressed = -1;
 	m_tracking = 0;
+	m_tips = NULL;
 }
 
 CMainToolBar::~CMainToolBar()
@@ -271,6 +295,10 @@ int CMainToolBar::Create(CWnd *parent)
 		L"", WS_CHILD|WS_VISIBLE, CRect(0, 0, 100, 32), parent, AFX_IDW_TOOLBAR))
 		return 0;
 
+	m_search.Create(WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_AUTOHSCROLL, CRect(0, 0, 10, 10), this, IDC_SEARCH);
+	m_tips = ::CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL, WS_POPUP|TTS_ALWAYSTIP|TTS_NOPREFIX,
+		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, m_hWnd, NULL, AfxGetInstanceHandle(), NULL);
+
 	Reload();
 	EnableState(ViewFree, 1);
 
@@ -279,6 +307,8 @@ int CMainToolBar::Create(CWnd *parent)
 
 void CMainToolBar::OnDestroy()
 {
+	if (m_tips != NULL) ::DestroyWindow(m_tips);
+	m_tips = NULL;
 	m_iconfont.DeleteObject();
 	m_textfont.DeleteObject();
 	CWnd::OnDestroy();
@@ -319,8 +349,102 @@ void CMainToolBar::Reload(void)
 	m_textfont.Attach(Dpi_CreateUIFont(dpi, 9));
 
 	m_height = Dpi_Scale(36, dpi);
+
+	m_fieldbrush.DeleteObject();
+	m_fieldbrush.CreateSolidBrush(Theme_IsDark() ? RGB(0x2D, 0x2D, 0x2D) : RGB(0xFF, 0xFF, 0xFF));
+	if (m_search.m_hWnd != NULL) {
+		m_search.SetFont(&m_textfont);
+		m_search.SendMessage(EM_SETCUEBANNER, TRUE, (LPARAM)CurLang->ex->searchcue);
+	}
+
 	Layout();
 	if (m_hWnd != NULL) Invalidate();
+}
+
+void CMainToolBar::OnSize(UINT nType, int cx, int cy)
+{
+	CWnd::OnSize(nType, cx, cy);
+	Layout();
+	Invalidate(FALSE);
+}
+
+HBRUSH CMainToolBar::OnCtlColor(CDC *pDC, CWnd *pWnd, UINT nCtlColor)
+{
+	pDC->SetTextColor(Theme_IsDark() ? RGB(0xFF, 0xFF, 0xFF) : RGB(0x1A, 0x1A, 0x1A));
+	pDC->SetBkColor(Theme_IsDark() ? RGB(0x2D, 0x2D, 0x2D) : RGB(0xFF, 0xFF, 0xFF));
+	return (HBRUSH)m_fieldbrush.m_hObject;
+}
+
+// One tooltip per button, showing its name.  TTF_SUBCLASS lets the tooltip
+// watch the mouse by itself.
+void CMainToolBar::UpdateTooltips(void)
+{
+	if (m_tips == NULL) return;
+	TOOLINFO ti;
+	memset(&ti, 0, sizeof(ti));		// lpszText must be NULL, or Windows copies the text into it
+	ti.cbSize = sizeof(ti);
+	while (::SendMessage(m_tips, TTM_ENUMTOOLS, 0, (LPARAM)&ti))
+		::SendMessage(m_tips, TTM_DELTOOL, 0, (LPARAM)&ti);
+	for (size_t i = 0; i < m_buttons.size(); i++) {
+		CString label = CurLang->toolbarnames[m_buttons[i].label];
+		memset(&ti, 0, sizeof(ti));
+		ti.cbSize = sizeof(ti);
+		ti.uFlags = TTF_SUBCLASS;
+		ti.hwnd = m_hWnd;
+		ti.uId = i + 1;
+		ti.rect = m_buttons[i].rect;
+		ti.lpszText = (LPWSTR)(LPCWSTR)label;
+		::SendMessage(m_tips, TTM_ADDTOOL, 0, (LPARAM)&ti);
+	}
+	SetWindowTheme(m_tips, Theme_IsDark() ? L"DarkMode_Explorer" : NULL, NULL);
+}
+
+void CMainToolBar::OnSearchFocus()
+{
+	Invalidate(FALSE);		// The box's border shows when it has focus
+}
+
+void CMainToolBar::OnSearchChange()
+{
+	// Wait until the user stops typing for a moment.
+	SetTimer(1, 300, NULL);
+}
+
+void CMainToolBar::OnTimer(UINT_PTR id)
+{
+	if (id == 1) {
+		KillTimer(1);
+		ApplySearch();
+	}
+	else CWnd::OnTimer(id);
+}
+
+void CMainToolBar::ApplySearch(void)
+{
+	CFolderView *view = (CFolderView *)theApp.m_view;
+	if (view == NULL) return;
+
+	CString text;
+	m_search.GetWindowText(text);
+	ui64 matches = 0, matchsize = 0;
+	view->SetSearch(text, matches, matchsize);
+
+	text.Trim();
+	CString result;
+	if (text.IsEmpty() || !view->IsAnythingOpen()) result.Empty();
+	else if (matches == 0) result = CurLang->ex->searchnone;
+	else result.Format(matches == 1 ? CurLang->ex->searchmatch : CurLang->ex->searchmatches,
+		(LPCWSTR)FormatCountText(matches), (LPCWSTR)FormatSizeText(matchsize));
+	CMainFrame *frame = (CMainFrame *)GetParent();
+	frame->m_legend.SetSearchResult(result);
+	frame->RecalcLayout(0);
+}
+
+void CMainToolBar::RefreshSearch(void)
+{
+	CString text;
+	if (m_search.m_hWnd != NULL) m_search.GetWindowText(text);
+	if (!text.IsEmpty()) ApplySearch();
 }
 
 void CMainToolBar::Layout(void)
@@ -330,16 +454,47 @@ void CMainToolBar::Layout(void)
 	int dpi = Dpi_ForWindow(m_hWnd);
 	CClientDC dc(this);
 	CFont *oldfont = dc.SelectObject(&m_textfont);
+	CRect client;
+	GetClientRect(&client);
 
-	int x = Dpi_Scale(4, dpi);
+	// Lay out the buttons with labels if they fit next to a usable search
+	// field; otherwise, use icons only.
+	TEXTMETRIC tm;
+	dc.GetTextMetrics(&tm);
 	int top = Dpi_Scale(3, dpi), bottom = m_height - Dpi_Scale(3, dpi);
-	for (size_t i = 0; i < m_buttons.size(); i++) {
-		Button &button = m_buttons[i];
-		CSize textsize = dc.GetTextExtent(CurLang->toolbarnames[button.label]);
-		int width = Dpi_Scale(8 + 16 + 6 + 8, dpi) + textsize.cx;
-		button.rect.SetRect(x, top, x + width, bottom);
-		x += width + Dpi_Scale(2, dpi);
-		if (button.separator_after) x += Dpi_Scale(9, dpi);
+	int margin = Dpi_Scale(8, dpi), minbox = Dpi_Scale(140, dpi), maxbox = Dpi_Scale(260, dpi);
+	int x = 0;
+	for (int level = 0; level <= 3; level++) {
+		x = Dpi_Scale(4, dpi);
+		for (size_t i = 0; i < m_buttons.size(); i++) {
+			Button &button = m_buttons[i];
+			button.showlabel = (button.priority > level);
+			int width = Dpi_Scale(7 + 16 + 7, dpi);
+			if (button.showlabel)
+				width += Dpi_Scale(5, dpi) + dc.GetTextExtent(CurLang->toolbarnames[button.label]).cx;
+			button.rect.SetRect(x, top, x + width, bottom);
+			x += width + Dpi_Scale(1, dpi);
+			if (button.separator_after) x += Dpi_Scale(7, dpi);
+		}
+		if (client.right - margin - (x + margin) >= minbox) break;
+	}
+
+	// The search field takes the space left at the right end.
+	// On a very narrow window the buttons come first, so the search field
+	// shrinks into the space left, or hides if there's no room at all.
+	int boxwidth = client.right - margin - (x + margin);
+	if (boxwidth > maxbox) boxwidth = maxbox;
+	BOOL showsearch = (boxwidth >= Dpi_Scale(90, dpi));
+	if (!showsearch) boxwidth = 0;
+	if (m_search.m_hWnd != NULL) m_search.ShowWindow(showsearch ? SW_SHOW : SW_HIDE);
+	int boxheight = tm.tmHeight + Dpi_Scale(12, dpi);
+	int boxtop = (m_height - boxheight) / 2;
+	m_searchbox.SetRect(client.right - margin - boxwidth, boxtop, client.right - margin, boxtop + boxheight);
+	UpdateTooltips();
+	if (m_search.m_hWnd != NULL) {
+		int left = m_searchbox.left + Dpi_Scale(8 + 16 + 6, dpi);
+		m_search.SetWindowPos(NULL, left, m_searchbox.top + (boxheight - tm.tmHeight) / 2,
+			m_searchbox.right - Dpi_Scale(8, dpi) - left, tm.tmHeight, SWP_NOZORDER|SWP_NOACTIVATE);
 	}
 	dc.SelectObject(oldfont);
 }
@@ -408,24 +563,40 @@ void CMainToolBar::OnPaint()
 
 		dc.SetTextColor(button.enabled ? text : disabled);
 
-		CRect iconrect(rect.left + Dpi_Scale(8, dpi), rect.top,
-			rect.left + Dpi_Scale(8 + 16, dpi), rect.bottom);
+		CRect iconrect(rect.left + Dpi_Scale(7, dpi), rect.top,
+			rect.left + Dpi_Scale(7 + 16, dpi), rect.bottom);
 		CFont *oldfont = dc.SelectObject(&m_iconfont);
 		wchar_t glyph[2] = { button.glyph, 0 };
 		dc.DrawText(glyph, 1, &iconrect, DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
 
-		CRect textrect(iconrect.right + Dpi_Scale(6, dpi), rect.top, rect.right, rect.bottom);
 		dc.SelectObject(&m_textfont);
-		dc.DrawText(CurLang->toolbarnames[button.label], -1, &textrect,
-			DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
+		if (button.showlabel) {
+			CRect textrect(iconrect.right + Dpi_Scale(5, dpi), rect.top, rect.right, rect.bottom);
+			dc.DrawText(CurLang->toolbarnames[button.label], -1, &textrect,
+				DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
+		}
 		dc.SelectObject(oldfont);
 
 		if (button.separator_after) {
-			int sx = rect.right + Dpi_Scale(2 + 4, dpi);
+			int sx = rect.right + Dpi_Scale(1 + 3, dpi);
 			dc.FillSolidRect(sx, rect.top + Dpi_Scale(6, dpi), Dpi_Scale(1, dpi),
 				rect.Height() - Dpi_Scale(12, dpi), line);
 		}
 	}
+
+	// The search box, with a magnifying glass, and the match count beside it.
+	COLORREF field = dark ? RGB(0x2D, 0x2D, 0x2D) : RGB(0xFF, 0xFF, 0xFF);
+	COLORREF fieldline = (GetFocus() == &m_search) ? (dark ? RGB(0x99, 0xEB, 0xFF) : RGB(0x00, 0x5F, 0xB8))
+		: (dark ? RGB(0x45, 0x45, 0x45) : RGB(0xC8, 0xC8, 0xC8));
+	if (m_searchbox.Width() > 0)
+		FillRoundRect(&dc, m_searchbox, Dpi_Scale(8, dpi), field, fieldline);
+	dc.SetTextColor(dark ? RGB(0xC8, 0xC8, 0xC8) : RGB(0x60, 0x60, 0x60));
+	CFont *oldfont = dc.SelectObject(&m_iconfont);
+	CRect glyphrect(m_searchbox.left + Dpi_Scale(8, dpi), m_searchbox.top,
+		m_searchbox.left + Dpi_Scale(8 + 16, dpi), m_searchbox.bottom);
+	if (m_searchbox.Width() > 0)
+		dc.DrawText(L"\xE721", 1, &glyphrect, DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
+	dc.SelectObject(oldfont);
 
 	paintdc.BitBlt(0, 0, client.Width(), client.Height(), &dc, 0, 0, SRCCOPY);
 	dc.SelectObject(oldbitmap);
@@ -506,6 +677,7 @@ void CMainToolBar::UpdateButtonsForView(CFolderView *view)
 			break;
 		case ID_FILE_REFRESH:
 		case ID_VIEW_FREE:
+		case ID_VIEW_LARGEST:
 			enabled = view->IsAnythingOpen();
 			break;
 		case ID_VIEW_ZOOM_FULL:
@@ -520,4 +692,90 @@ void CMainToolBar::UpdateButtonsForView(CFolderView *view)
 		if (button.enabled != enabled) button.enabled = enabled, changed = 1;
 	}
 	if (changed && m_hWnd != NULL) Invalidate(FALSE);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
+BEGIN_MESSAGE_MAP(CLegendBar, CWnd)
+	ON_WM_PAINT()
+	ON_WM_ERASEBKGND()
+END_MESSAGE_MAP()
+
+BOOL CLegendBar::Create(CWnd *parent)
+{
+	return CWnd::Create(AfxRegisterWndClass(CS_HREDRAW|CS_VREDRAW, ::LoadCursor(NULL, IDC_ARROW)),
+		L"", WS_CHILD, CRect(0, 0, 100, 24), parent, AFX_IDW_STATUS_BAR);
+}
+
+BOOL CLegendBar::ShouldShow(void)
+{
+	return theApp.m_settings.file_color == FILE_COLOR_BY_TYPE || !m_searchresult.IsEmpty();
+}
+
+void CLegendBar::SetSearchResult(const CString &text)
+{
+	m_searchresult = text;
+	if (m_hWnd != NULL) Invalidate(FALSE);
+}
+
+int CLegendBar::GetHeight(void)
+{
+	return Dpi_Scale(28, Dpi_ForWindow(m_hWnd));
+}
+
+BOOL CLegendBar::OnEraseBkgnd(CDC *pDC)
+{
+	return 1;
+}
+
+void CLegendBar::OnPaint()
+{
+	CPaintDC paintdc(this);
+	CRect client;
+	GetClientRect(&client);
+	if (client.IsRectEmpty()) return;
+
+	CDC dc;
+	dc.CreateCompatibleDC(&paintdc);
+	CBitmap bitmap;
+	bitmap.CreateCompatibleBitmap(&paintdc, client.Width(), client.Height());
+	CBitmap *oldbitmap = dc.SelectObject(&bitmap);
+
+	int dpi = Dpi_ForWindow(m_hWnd);
+	BOOL dark = Theme_IsDark();
+	dc.FillSolidRect(&client, dark ? RGB(0x20, 0x20, 0x20) : RGB(0xF3, 0xF3, 0xF3));
+	dc.FillSolidRect(0, 0, client.Width(), 1, dark ? RGB(0x3A, 0x3A, 0x3A) : RGB(0xD6, 0xD6, 0xD6));
+
+	CFont font;
+	font.Attach(Dpi_CreateUIFont(dpi, 9));
+	CFont *oldfont = dc.SelectObject(&font);
+	dc.SetBkMode(TRANSPARENT);
+	dc.SetTextColor(dark ? RGB(0xFF, 0xFF, 0xFF) : RGB(0x1A, 0x1A, 0x1A));
+
+	// The search result, at the right end.
+	int right = client.right;
+	if (!m_searchresult.IsEmpty()) {
+		CRect textrect(0, 0, client.right - Dpi_Scale(12, dpi), client.bottom);
+		dc.DrawText(m_searchresult, &textrect, DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
+		right = textrect.right - dc.GetTextExtent(m_searchresult).cx - Dpi_Scale(12, dpi);
+	}
+
+	// Same colors as the boxes in the view, so the legend matches them.
+	int x = Dpi_Scale(10, dpi), swatch = Dpi_Scale(14, dpi);
+	for (int type = 0; type < FT_COUNT && theApp.m_settings.file_color == FILE_COLOR_BY_TYPE; type++) {
+		COLORREF color = GetFileTypeColor(type, 0);
+		if (dark) color = RGB(GetRValue(color) * 9 / 20, GetGValue(color) * 9 / 20, GetBValue(color) * 9 / 20);
+		int sy = (client.Height() - swatch) / 2;
+		dc.FillSolidRect(x, sy, swatch, swatch, RGB(0, 0, 0));
+		dc.FillSolidRect(x + 1, sy + 1, swatch - 2, swatch - 2, color);
+		x += swatch + Dpi_Scale(6, dpi);
+		CString name = CurLang->ex->typenames[type];
+		CRect textrect(x, 0, right, client.bottom);
+		dc.DrawText(name, &textrect, DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
+		x += dc.GetTextExtent(name).cx + Dpi_Scale(18, dpi);
+	}
+
+	dc.SelectObject(oldfont);
+	paintdc.BitBlt(0, 0, client.Width(), client.Height(), &dc, 0, 0, SRCCOPY);
+	dc.SelectObject(oldbitmap);
 }

@@ -39,11 +39,11 @@ set PCH=/YuStdAfx.h /Fp%OBJ%\SpaceMonger.pch
 
 echo Compiling...
 cl %CFLAGS% /YcStdAfx.h /Fp%OBJ%\SpaceMonger.pch StdAfx.cpp || exit /b 1
-cl %CFLAGS% %PCH% AboutDialog.cpp DriveDialog.cpp FolderTree.cpp FolderView.cpp Freedoc.cpp Freeview.cpp lang_en.cpp lang_fr.cpp Mainfrm.cpp SetupDlg.cpp SpaceMonger.cpp Theme.cpp TipWnd.cpp || exit /b 1
+cl %CFLAGS% %PCH% AboutDialog.cpp DriveDialog.cpp FolderTree.cpp FolderView.cpp Freedoc.cpp Freeview.cpp lang_en.cpp lang_fr.cpp Mainfrm.cpp SetupDlg.cpp SpaceMonger.cpp Theme.cpp TipWnd.cpp FileTypes.cpp LargestDialog.cpp || exit /b 1
 rc /nologo %DEFS% /fo %OBJ%\SpaceMonger.res SpaceMonger.rc || exit /b 1
 
 echo Linking...
-set LFLAGS=/nologo /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup /DEBUG /MANIFEST:EMBED /MANIFESTINPUT:SpaceMonger.manifest
+set LFLAGS=/nologo /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup /DEBUG /MANIFEST:EMBED /MANIFESTINPUT:SpaceMonger.manifest /MAP:%OBJ%\SpaceMonger.map
 if /i not "%CONFIG%"=="Debug" set LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF
 link %LFLAGS% /OUT:%BIN%\SpaceMonger.exe %OBJ%\*.obj %OBJ%\SpaceMonger.res shlwapi.lib dwmapi.lib uxtheme.lib comctl32.lib msimg32.lib || exit /b 1
 

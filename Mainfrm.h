@@ -22,6 +22,7 @@ public:
 
 	void Reload(void);			// Language, theme, or DPI changed
 	int GetHeight(void) const { return m_height; }
+	void RefreshSearch(void);	// The scan changed; recount search matches
 
 protected:
 	struct Button {
@@ -29,12 +30,16 @@ protected:
 		wchar_t glyph;
 		int label;				// Index into CurLang->toolbarnames
 		BOOL separator_after;
+		int priority;			// Labels with lower priority are dropped first
+		BOOL showlabel;
 		BOOL enabled, checked;
 		CRect rect;
 	};
 
 	void Layout(void);
 	int HitTest(CPoint point);
+	void ApplySearch(void);
+	void UpdateTooltips(void);
 
 	//{{AFX_MSG(CMainToolBar)
 	afx_msg void OnPaint();
@@ -44,6 +49,11 @@ protected:
 	afx_msg void OnLButtonDown(UINT flags, CPoint point);
 	afx_msg void OnLButtonUp(UINT flags, CPoint point);
 	afx_msg void OnDestroy();
+	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg void OnTimer(UINT_PTR id);
+	afx_msg void OnSearchChange();
+	afx_msg void OnSearchFocus();
+	afx_msg HBRUSH OnCtlColor(CDC *pDC, CWnd *pWnd, UINT nCtlColor);
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 
@@ -52,6 +62,28 @@ protected:
 	int m_height;
 	int m_hot, m_pressed;
 	BOOL m_tracking;
+	HWND m_tips;				// Tooltips for the buttons
+	CEdit m_search;
+	CRect m_searchbox;			// The rounded box around the search field
+	CBrush m_fieldbrush;
+};
+
+// The strip along the bottom.  It explains the "By File Type" colors, and
+// shows how many files a search found.
+class CLegendBar : public CWnd {
+public:
+	BOOL Create(CWnd *parent);
+	int GetHeight(void);
+	BOOL ShouldShow(void);
+	void SetSearchResult(const CString &text);
+
+protected:
+	CString m_searchresult;		// "12 matches, 4.5 GB", or empty
+
+protected:
+	afx_msg void OnPaint();
+	afx_msg BOOL OnEraseBkgnd(CDC *pDC);
+	DECLARE_MESSAGE_MAP()
 };
 
 class CMainFrame : public CFrameWnd {
@@ -83,6 +115,7 @@ protected:
 
 public:
 	CMainToolBar m_toolbar;
+	CLegendBar m_legend;
 };
 
 #endif

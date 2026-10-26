@@ -22,6 +22,7 @@ static const wchar_t *densitynames[] = {
 static const wchar_t *uscolornames[] = {
 	L"Rainbow", L"Windows Colors", L"White", L"Light Gray", L"Dark Gray",
 	L"Red", L"Orange", L"Yellow", L"Green", L"Aqua", L"Blue", L"Violet",
+	L"By File Type",
 };
 
 static const wchar_t *monthnames[] = {
@@ -36,11 +37,40 @@ static const wchar_t *attribnames[] = {
 
 static const wchar_t *toolbarnames[] = {
 	L"Open", L"Reload", L"Zoom Full", L"Zoom In", L"Zoom Out",
-	L"Free Space", L"Run / Open", L"Recycle", L"Setup", L"About",
+	L"Free Space", L"Run / Open", L"Recycle", L"Setup", L"About", L"Largest",
 };
 
 static const wchar_t *themenames[] = {
 	L"Use Windows setting", L"Light", L"Dark",
+};
+
+static const wchar_t *typenames[] = {
+	L"Videos", L"Pictures", L"Music", L"Documents",
+	L"Archives and disk images", L"Programs and games", L"System", L"Other",
+};
+
+static const LangExtra ExtraEn = {
+	L"Largest Files",
+	L"The 50 largest files in %s. Online-only cloud files aren't listed, since they don't use space on this disk.",
+	L"These files are your exceptions. They're left out of the largest-files list.",
+	L"Name", L"Size", L"Folder", L"Modified",
+	L"&Go To", L"&Add to Exceptions", L"&Remove from Exceptions", L"Show e&xceptions instead", L"Close",
+	L"No files to show.",
+	L"<Space the scan couldn't see: %d.%d%%>",
+	L"Protected system areas and files SpaceMonger isn't allowed to read",
+	L"Rescan as administrator to see more",
+	L"Rescan as &Administrator",
+	L"E&xport to Spreadsheet...",
+	L"Export to Spreadsheet",
+	L"This will save %s rows. Excel can only open the first 1,048,576.\n\nSave anyway?",
+	L"SpaceMonger couldn't save the file.",
+	L"Saved %s rows to:\n%s",
+	L"Search (name or .ext)",
+	L"%s matches, %s",
+	L"%s match, %s",
+	L"No matches",
+	typenames,
+	L"SpaceMonger couldn't open this folder. It may not exist, or you may not have permission to read it.\n\n%s",
 };
 
 Lang LangUs = {
@@ -88,11 +118,13 @@ Lang LangUs = {
 	L"Theme:",
 	themenames,
 	L"Scanning Folder...",
+	&ExtraEn,
 };
 
 static const wchar_t *ukcolornames[] = {
 	L"Rainbow", L"Windows Colours", L"White", L"Light Gray", L"Dark Gray",
 	L"Red", L"Orange", L"Yellow", L"Green", L"Aqua", L"Blue", L"Violet",
+	L"By File Type",
 };
 
 Lang LangUk = {
@@ -140,5 +172,6 @@ Lang LangUk = {
 	L"Theme:",
 	themenames,
 	L"Scanning Folder...",
+	&ExtraEn,
 };
 

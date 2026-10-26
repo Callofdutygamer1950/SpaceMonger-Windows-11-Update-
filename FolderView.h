@@ -7,7 +7,7 @@
 struct CDisplayFolder {
 	wchar_t *name;
 	si32 depth;
-	ui32 flags;				// 1=folder, 2=free space, 4=highlighted
+	ui32 flags;				// 1=folder, 2=special block, 4=highlighted, 16=hidden space
 	CFolder *source;
 	ui32 index;
 	si16 x, y, w, h;
@@ -48,6 +48,14 @@ public:
 	void Redraw(void);
 
 	void SelectFolder(CDisplayFolder *cur);
+
+	// Search: files whose names match stay bright, the rest are dimmed.
+	void SetSearch(const CString &text, ui64 &matches, ui64 &matchsize);
+	BOOL IsSearching(void) const { return !m_search.IsEmpty(); }
+
+	// Zooms to the folder holding a file, and selects the file.
+	void ShowFile(CFolder *folder, unsigned int index);
+	CFolder *GetViewRoot(void) { return rootfolder; }
 
 	//{{AFX_VIRTUAL(CFolderView)
 protected:
@@ -101,6 +109,12 @@ protected:
 	CTipWnd m_infotipwnd;
 	CTipWnd m_nametipwnd;
 	CDisplayFolder *lastcur;
+
+	BOOL MatchesSearch(const wchar_t *name) const;
+	void CountMatches(CFolder *folder, ui64 &matches, ui64 &matchsize) const;
+
+	CString m_search;	// Lowercase search text, or empty
+	BOOL m_searchext;	// Search text is an extension (".mp4")
 
 	int m_dpi;			// Current DPI of the view
 	int m_border;		// Folder border thickness, in pixels

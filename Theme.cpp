@@ -20,9 +20,11 @@ static HBRUSH g_brushes[COLOR_MENUBAR + 1];
 enum PreferredAppMode { AppModeDefault, AppModeAllowDark, AppModeForceDark, AppModeForceLight };
 typedef PreferredAppMode (WINAPI *SetPreferredAppModeFunc)(PreferredAppMode mode);
 typedef void (WINAPI *FlushMenuThemesFunc)(void);
+typedef BOOL (WINAPI *AllowDarkModeForWindowFunc)(HWND hwnd, BOOL allow);
 
 static SetPreferredAppModeFunc pSetPreferredAppMode = NULL;
 static FlushMenuThemesFunc pFlushMenuThemes = NULL;
+static AllowDarkModeForWindowFunc pAllowDarkModeForWindow = NULL;
 
 static BOOL SystemUsesDarkApps(void)
 {
@@ -40,6 +42,7 @@ void Theme_Init(void)
 	if (uxtheme != NULL) {
 		pSetPreferredAppMode = (SetPreferredAppModeFunc)GetProcAddress(uxtheme, MAKEINTRESOURCEA(135));
 		pFlushMenuThemes = (FlushMenuThemesFunc)GetProcAddress(uxtheme, MAKEINTRESOURCEA(136));
+		pAllowDarkModeForWindow = (AllowDarkModeForWindowFunc)GetProcAddress(uxtheme, MAKEINTRESOURCEA(133));
 	}
 }
 
@@ -98,6 +101,59 @@ HBRUSH Theme_Brush(int syscolor)
 	return g_brushes[syscolor];
 }
 
+// A list's column headers report to the list, not the dialog, so the list
+// is subclassed, and in dark mode it draws the header itself.
+static LRESULT CALLBACK ListViewSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+	UINT_PTR, DWORD_PTR)
+{
+	if (msg == WM_NOTIFY && g_dark) {
+		NMHDR *nm = (NMHDR *)lParam;
+		HWND header = ListView_GetHeader(hwnd);
+		if (nm->code == NM_CUSTOMDRAW && nm->hwndFrom == header) {
+			NMCUSTOMDRAW *cd = (NMCUSTOMDRAW *)lParam;
+			COLORREF back = RGB(0x2B, 0x2B, 0x2B), line = RGB(0x45, 0x45, 0x45);
+			if (cd->dwDrawStage == CDDS_PREPAINT)
+				return CDRF_NOTIFYITEMDRAW|CDRF_NOTIFYPOSTPAINT;
+			if (cd->dwDrawStage == CDDS_ITEMPREPAINT) {
+				RECT r = cd->rc;
+				SetBkColor(cd->hdc, back);
+				ExtTextOut(cd->hdc, 0, 0, ETO_OPAQUE, &r, NULL, 0, NULL);
+				RECT sep = { r.right - 1, r.top + 4, r.right, r.bottom - 4 };
+				SetBkColor(cd->hdc, line);
+				ExtTextOut(cd->hdc, 0, 0, ETO_OPAQUE, &sep, NULL, 0, NULL);
+
+				wchar_t text[128] = L"";
+				HDITEM item;
+				item.mask = HDI_TEXT|HDI_FORMAT;
+				item.pszText = text;
+				item.cchTextMax = 128;
+				Header_GetItem(header, (int)cd->dwItemSpec, &item);
+				int pad = MulDiv(6, Dpi_ForWindow(hwnd), 96);
+				r.left += pad, r.right -= pad;
+				SetBkMode(cd->hdc, TRANSPARENT);
+				SetTextColor(cd->hdc, Theme_Color(COLOR_WINDOWTEXT));
+				HGDIOBJ oldfont = SelectObject(cd->hdc, (HFONT)SendMessage(hwnd, WM_GETFONT, 0, 0));
+				UINT align = (item.fmt & HDF_RIGHT) ? DT_RIGHT : (item.fmt & HDF_CENTER) ? DT_CENTER : DT_LEFT;
+				DrawText(cd->hdc, text, -1, &r, align|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+				SelectObject(cd->hdc, oldfont);
+				return CDRF_SKIPDEFAULT;
+			}
+			if (cd->dwDrawStage == CDDS_POSTPAINT) {
+				// The empty part of the header, past the last column.
+				RECT client, last = { 0 };
+				GetClientRect(header, &client);
+				int count = Header_GetItemCount(header);
+				if (count > 0) Header_GetItemRect(header, Header_OrderToIndex(header, count - 1), &last);
+				client.left = last.right;
+				SetBkColor(cd->hdc, back);
+				ExtTextOut(cd->hdc, 0, 0, ETO_OPAQUE, &client, NULL, 0, NULL);
+				return CDRF_DODEFAULT;
+			}
+		}
+	}
+	return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
 static BOOL CALLBACK ThemeChildProc(HWND hwnd, LPARAM)
 {
 	wchar_t cls[64];
@@ -123,6 +179,16 @@ static BOOL CALLBACK ThemeChildProc(HWND hwnd, LPARAM)
 		ListView_SetBkColor(hwnd, Theme_Color(COLOR_WINDOW));
 		ListView_SetTextBkColor(hwnd, Theme_Color(COLOR_WINDOW));
 		ListView_SetTextColor(hwnd, Theme_Color(COLOR_WINDOWTEXT));
+		HWND header = ListView_GetHeader(hwnd);
+		if (header != NULL) {
+			if (pAllowDarkModeForWindow != NULL) {
+				pAllowDarkModeForWindow(hwnd, g_dark);
+				pAllowDarkModeForWindow(header, g_dark);
+			}
+			SetWindowTheme(header, g_dark ? L"DarkMode_ItemsView" : NULL, NULL);
+			SendMessage(header, WM_THEMECHANGED, 0, 0);
+			SetWindowSubclass(hwnd, ListViewSubclassProc, 1, 0);
+		}
 	}
 	else if (!_wcsicmp(cls, L"ScrollBar")) {
 		if (g_dark) theme = L"DarkMode_Explorer";

@@ -7,13 +7,23 @@ class CFolderDialog;
 struct CFolder;
 struct CScanState;
 
+// Flags in CFolder::attribs
+enum {
+	ENTRY_CLOUD_ONLY = 1,	// Stored only in the cloud; uses no space on this disk
+};
+
+// Names of the two special blocks in the root folder of a whole-drive scan.
+#define FREE_SPACE_NAME		L"<"
+#define HIDDEN_SPACE_NAME	L"<?"
+inline bool IsSpecialName(const wchar_t *name) { return name != NULL && name[0] == L'<'; }
+
 struct CFolder {
 public:
 	CFolder();
 	~CFolder();
 
 	void AddFile(CFolderTree *tree, const wchar_t *name, ui32 namelen, ui64 size, ui64 actual_size,
-		ui64 time, ui64 fileid = 0);
+		ui64 time, ui64 fileid = 0, ui8 attrib = 0);
 	void AddFolder(CFolderTree *tree, const wchar_t *name, ui32 namelen, CFolder *folder, ui64 time);
 	void Finalize(void);
 	void DelFile(unsigned int index);
@@ -41,6 +51,7 @@ public:
 	ui64 *actualsizes;		// Logical file size
 	ui64 *times;
 	ui64 *fileids;			// NTFS file ID (for counting hard links once), or 0
+	ui8 *attribs;			// ENTRY_* flags
 	ui64 size_self, size_children;
 
 	unsigned int cur, max;
@@ -55,6 +66,7 @@ struct CScanState {
 	BOOL hardlinks;			// Volume supports hard links, so count each file once
 
 	std::atomic<ui64> numfiles, numfolders, filespace;
+	std::atomic<ui64> cloudspace;	// Part of filespace that's cloud-only
 	std::atomic<bool> cancelled, done;
 
 	std::mutex pathlock;	// Protects curpath
@@ -81,14 +93,22 @@ public:
 
 	BOOL IsVolumeRoot(void) const;
 
+	// After a rescan, the old tree stays alive until the view has let go of
+	// it (the view keeps pointers into it), then this frees it.
+	void FreeOldTree(void);
+	CString GetFullPath(CFolder *folder, unsigned int index) const;
+	BOOL FindPath(const CString &path, CFolder *&folder, unsigned int &index) const;
+
 protected:
 	CFolder *root, *cur;
+	CFolder *oldroot;		// The previous scan, until FreeOldTree()
 
 public:
 	CString m_path;
 	ui64 freespace, usedspace, totalspace, clustersize;
 	ui64 numfiles, numfolders;
 	ui64 filespace;
+	ui64 hiddenspace;		// Used space the scan couldn't account for
 	BOOL hardlinks;
 };
 

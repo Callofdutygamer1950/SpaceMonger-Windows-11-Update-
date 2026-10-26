@@ -95,6 +95,8 @@
     <ClCompile Include="SetupDlg.cpp" />
     <ClCompile Include="SpaceMonger.cpp" />
     <ClCompile Include="Theme.cpp" />
+    <ClCompile Include="FileTypes.cpp" />
+    <ClCompile Include="LargestDialog.cpp" />
     <ClCompile Include="TipWnd.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -103,6 +105,8 @@
     <ClInclude Include="E.H" />
     <ClInclude Include="FolderTree.h" />
     <ClInclude Include="FolderView.h" />
+    <ClInclude Include="FileTypes.h" />
+    <ClInclude Include="LargestDialog.h" />
     <ClInclude Include="lang.h" />
     <ClInclude Include="Mainfrm.h" />
     <ClInclude Include="resource.h" />

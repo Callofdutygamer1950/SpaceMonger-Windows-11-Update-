@@ -20,7 +20,8 @@ CString MakeLongPath(const CString &path)
 }
 
 CScanState::CScanState()
-	: numfiles(0), numfolders(0), filespace(0), cancelled(false), done(false), lastpathtick(0)
+	: numfiles(0), numfolders(0), filespace(0), cloudspace(0), cancelled(false), done(false),
+	  lastpathtick(0)
 {
 	clustersize = 4096;
 	skipcloudonly = 0;
@@ -43,10 +44,10 @@ CString CScanState::GetPath(void)
 
 CFolderTree::CFolderTree()
 {
-	root = cur = NULL;
+	root = cur = oldroot = NULL;
 	freespace = usedspace = totalspace = 0;
 	clustersize = 4096;
-	numfiles = numfolders = filespace = 0;
+	numfiles = numfolders = filespace = hiddenspace = 0;
 	hardlinks = 0;
 	m_path = L"";
 }
@@ -54,6 +55,13 @@ CFolderTree::CFolderTree()
 CFolderTree::~CFolderTree()
 {
 	if (root != NULL) delete root;
+	if (oldroot != NULL) delete oldroot;
+}
+
+void CFolderTree::FreeOldTree(void)
+{
+	if (oldroot != NULL) delete oldroot;
+	oldroot = NULL;
 }
 
 BOOL CFolderTree::IsVolumeRoot(void) const
@@ -163,15 +171,29 @@ BOOL CFolderTree::LoadTree(const CString &path, BOOL includespace, CWnd *modalwi
 		return 0;
 	}
 
-	if (root != NULL) delete root;
+	// Don't delete the old tree yet: the view still points into it, and it
+	// may repaint while the finished dialog is showing.
+	FreeOldTree();
+	oldroot = root;
 	root = cur = newroot;
 	filespace = state.filespace;
 	numfiles = state.numfiles;
 	numfolders = state.numfolders;
 
 	dialog.ForcedUpdate(this, &state);
+	hiddenspace = 0;
 	if (includespace && wholedrive) {
-		root->AddFile(this, L"<", 1, freespace, freespace, 0);
+		// Whatever the disk says is in use, but the scan didn't find, is in
+		// places we can't read (System Volume Information, other users'
+		// folders, NTFS's own bookkeeping, and so on).
+		ui64 found = root->SizeTotal() - state.cloudspace;
+		if (usedspace > found) hiddenspace = usedspace - found;
+		ui64 threshold = totalspace / 1000;
+		if (threshold < 64 * 1024 * 1024) threshold = 64 * 1024 * 1024;
+		if (hiddenspace >= threshold)
+			root->AddFile(this, HIDDEN_SPACE_NAME, 2, hiddenspace, hiddenspace, 0);
+		else hiddenspace = 0;
+		root->AddFile(this, FREE_SPACE_NAME, 1, freespace, freespace, 0);
 		root->Finalize();
 	}
 
@@ -228,6 +250,49 @@ CFolder *CFolderTree::GetRoot(void)
 	return(root);
 }
 
+CString CFolderTree::GetFullPath(CFolder *folder, unsigned int index) const
+{
+	// Collect the folder names from here up to the root, then join them.
+	std::vector<const wchar_t *> parts;
+	for (CFolder *f = folder; f != NULL && f->parent != NULL; f = f->parent)
+		parts.push_back(f->parent->names[f->parentindex]);
+	CString path = m_path;
+	for (size_t i = parts.size(); i-- > 0; ) {
+		path += parts[i];
+		path += L"\\";
+	}
+	path += folder->names[index];
+	return path;
+}
+
+// Finds a file or folder in the tree by its full path.
+BOOL CFolderTree::FindPath(const CString &path, CFolder *&folder, unsigned int &index) const
+{
+	if (root == NULL || path.GetLength() <= m_path.GetLength()
+		|| path.Left(m_path.GetLength()).CompareNoCase(m_path) != 0)
+		return 0;
+
+	CString rest = path.Mid(m_path.GetLength());
+	CFolder *cur = root;
+	int start = 0;
+	for (;;) {
+		int slash = rest.Find(L'\\', start);
+		CString part = (slash < 0) ? rest.Mid(start) : rest.Mid(start, slash - start);
+		unsigned int i;
+		for (i = 0; i < cur->cur; i++)
+			if (!_wcsicmp(cur->names[i], part)) break;
+		if (i >= cur->cur) return 0;
+		if (slash < 0 || slash == rest.GetLength() - 1) {
+			folder = cur;
+			index = i;
+			return 1;
+		}
+		if (cur->children[i] == NULL) return 0;
+		cur = cur->children[i];
+		start = slash + 1;
+	}
+}
+
 CFolder *CFolderTree::SetCur(const CString &path)
 {
 	return(cur);
@@ -280,6 +345,7 @@ CFolder::CFolder()
 	children = (CFolder **)malloc(sizeof(CFolder *) * max);
 	times = (ui64 *)malloc(sizeof(ui64) * max);
 	fileids = (ui64 *)malloc(sizeof(ui64) * max);
+	attribs = (ui8 *)malloc(sizeof(ui8) * max);
 	size_self = size_children = 0;
 	parent = NULL;
 	parentindex = 0;
@@ -300,6 +366,7 @@ CFolder::~CFolder()
 	free(actualsizes);
 	free(times);
 	free(fileids);
+	free(attribs);
 
 	cur = max = 0;
 	size_self = size_children = 0;
@@ -316,11 +383,12 @@ void CFolder::MoreEntries(void)
 	times = (ui64 *)realloc(times, sizeof(ui64) * newmax);
 	children = (CFolder **)realloc(children, sizeof(CFolder *) * newmax);
 	fileids = (ui64 *)realloc(fileids, sizeof(ui64) * newmax);
+	attribs = (ui8 *)realloc(attribs, sizeof(ui8) * newmax);
 	max = newmax;
 }
 
 void CFolder::AddFile(CFolderTree *tree, const wchar_t *name, ui32 namelen, ui64 size,
-	ui64 actual_size, ui64 time, ui64 fileid)
+	ui64 actual_size, ui64 time, ui64 fileid, ui8 attrib)
 {
 	if (cur >= max) MoreEntries();
 
@@ -328,6 +396,7 @@ void CFolder::AddFile(CFolderTree *tree, const wchar_t *name, ui32 namelen, ui64
 	actualsizes[cur] = actual_size;
 	times[cur] = time;
 	fileids[cur] = fileid;
+	attribs[cur] = attrib;
 	size_self += (sizes[cur] = size);
 	children[cur] = NULL;
 	cur++;
@@ -344,6 +413,7 @@ void CFolder::AddFolder(CFolderTree *tree, const wchar_t *name, ui32 namelen, CF
 	actualsizes[cur] = sizes[cur];
 	times[cur] = time;
 	fileids[cur] = 0;
+	attribs[cur] = 0;
 	children[cur] = folder;
 	folder->parent = this;
 	folder->parentindex = cur;
@@ -366,14 +436,15 @@ void CFolder::Finalize(void)
 		std::vector<wchar_t *> n(cur);
 		std::vector<CFolder *> c(cur);
 		std::vector<ui64> s(cur), a(cur), t(cur), f(cur);
+		std::vector<ui8> b(cur);
 		for (i = 0; i < cur; i++) {
 			unsigned int j = order[i];
 			n[i] = names[j], c[i] = children[j], s[i] = sizes[j];
-			a[i] = actualsizes[j], t[i] = times[j], f[i] = fileids[j];
+			a[i] = actualsizes[j], t[i] = times[j], f[i] = fileids[j], b[i] = attribs[j];
 		}
 		for (i = 0; i < cur; i++) {
 			names[i] = n[i], children[i] = c[i], sizes[i] = s[i];
-			actualsizes[i] = a[i], times[i] = t[i], fileids[i] = f[i];
+			actualsizes[i] = a[i], times[i] = t[i], fileids[i] = f[i], attribs[i] = b[i];
 		}
 	}
 
@@ -464,9 +535,19 @@ void CFolder::LoadFolder(CScanState *state, const CString &path)
 						size = (actualsize + clustermask) & ~clustermask;
 					}
 					else size = (ui64)info->AllocationSize.QuadPart;
+					// For sparse and compressed files, the size in the folder
+					// listing can be out of date, so ask for the real one.
+					if (!cloudonly && (attrib & (FILE_ATTRIBUTE_SPARSE_FILE|FILE_ATTRIBUTE_COMPRESSED))) {
+						DWORD high = 0;
+						DWORD low = GetCompressedFileSize(MakeLongPath(path + CString(name, namelen)), &high);
+						if (low != INVALID_FILE_SIZE || GetLastError() == NO_ERROR)
+							size = ((ui64)high << 32) | low;
+					}
 					ui64 fileid = state->hardlinks ? (ui64)info->FileId.QuadPart : 0;
-					AddFile(NULL, name, namelen, size, actualsize, time, fileid);
+					AddFile(NULL, name, namelen, size, actualsize, time, fileid,
+						cloudonly ? ENTRY_CLOUD_ONLY : 0);
 					state->filespace += size;
+					if (cloudonly) state->cloudspace += size;
 				}
 			}
 

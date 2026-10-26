@@ -93,14 +93,26 @@
 #define IDC_THEME                       1046
 #define IDC_STATIC_THEME                1047
 #define IDC_STATIC_SCANOPTIONS          1048
+#define IDD_LARGEST                     125
+#define IDC_LARGEST_LIST                1049
+#define IDC_LARGEST_INTRO               1050
+#define IDC_GOTO                        1051
+#define IDC_EXPLORE_FILE                1052
+#define IDC_RECYCLE_FILE                1053
+#define IDC_EXCEPTION                   1054
+#define IDC_SHOW_EXCEPTIONS             1055
+#define IDC_SEARCH                      1056
+#define ID_VIEW_LARGEST                 40021
+#define ID_FILE_EXPORT                  40022
+#define ID_FILE_RUNASADMIN              40023
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        124
-#define _APS_NEXT_COMMAND_VALUE         40021
-#define _APS_NEXT_CONTROL_VALUE         1049
+#define _APS_NEXT_RESOURCE_VALUE        126
+#define _APS_NEXT_COMMAND_VALUE         40024
+#define _APS_NEXT_CONTROL_VALUE         1057
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

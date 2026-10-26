@@ -44,6 +44,8 @@ struct CCurrentSettings {
 
 	wchar_t lang[4];		// Language, by two-letter code
 
+	std::vector<CString> exceptions;	// Files left out of the Largest Files list
+
 	void Reset(void);		// Reset to default values
 	void Load(void);		// Retrieve current settings from Registry
 	void Save(void);		// Save current settings to Registry
@@ -74,6 +76,9 @@ public:
 	afx_msg void OnShowFree(void);
 	afx_msg void OnSettings(void);
 	afx_msg void OnFileProperties(void);
+	afx_msg void OnViewLargest(void);
+	afx_msg void OnFileExport(void);
+	afx_msg void OnFileRunAsAdmin(void);
 	afx_msg void OnIgnoreUpdate(CCmdUI *ui);
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
@@ -82,6 +87,14 @@ public:
 	void OpenPath(const CString &path);
 	void ScanPath(CString path);
 	void ApplyTheme(void);
+	void ScanChanged(void);		// Refresh everything that depends on the scan
+
+	BOOL IsElevated(void);
+	BOOL IsException(const CString &path);
+	void AddException(const CString &path);
+	void RemoveException(const CString &path);
+
+	class CLargestDialog *m_largest;
 
 	CFrameWnd *m_mainframe;
 	CFreeDoc *m_document;
@@ -94,6 +107,9 @@ public:
 
 void GeneralIgnoreUpdate(CCmdUI *ui);
 BOOL PickFolder(HWND owner, CString &path);
+void ShowInExplorer(const CString &path);
+CString FormatSizeText(ui64 size);		// "102.3 MB"
+CString FormatCountText(ui64 value);	// "1,234,567"
 
 extern CSpaceMonger theApp;
 

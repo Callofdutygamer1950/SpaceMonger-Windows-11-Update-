@@ -9,6 +9,8 @@
 #include "SetupDlg.h"
 #include "TipWnd.h"
 #include "AboutDialog.h"
+#include "LargestDialog.h"
+#include "FileTypes.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // The primary CSpaceMonger object
@@ -34,6 +36,9 @@ BEGIN_MESSAGE_MAP(CSpaceMonger, CWinApp)
 	ON_COMMAND(ID_VIEW_ZOOM_OUT, OnZoomOut)
 	ON_COMMAND(ID_VIEW_FREE, OnShowFree)
 	ON_COMMAND(ID_SETTINGS, OnSettings)
+	ON_COMMAND(ID_VIEW_LARGEST, OnViewLargest)
+	ON_COMMAND(ID_FILE_EXPORT, OnFileExport)
+	ON_COMMAND(ID_FILE_RUNASADMIN, OnFileRunAsAdmin)
 	//}}AFX_MSG_MAP
 	ON_UPDATE_COMMAND_UI_RANGE(100, 41000, OnIgnoreUpdate)
 END_MESSAGE_MAP()
@@ -43,6 +48,7 @@ CSpaceMonger::CSpaceMonger()
 	m_document = NULL;
 	m_view = NULL;
 	m_mainframe = NULL;
+	m_largest = NULL;
 }
 
 CSpaceMonger::~CSpaceMonger()
@@ -110,8 +116,15 @@ BOOL CSpaceMonger::InitInstance()
 	m_mainframe->RecalcLayout();
 
 	// "SpaceMonger.exe C:\Some\Folder" starts by scanning that folder.
-	if (__argc > 1 && __wargv[1][0] != L'\0')
-		OpenPath(__wargv[1]);
+	if (__argc > 1 && __wargv[1][0] != L'\0') {
+		// "C:\" in quotes arrives as C:" (the backslash escapes the quote),
+		// so clean that up.
+		CString path = __wargv[1];
+		path.Trim();
+		path.TrimRight(L'"');
+		if (path.GetLength() == 2 && path[1] == L':') path += L"\\";
+		OpenPath(path);
+	}
 
 	return(TRUE);
 }
@@ -204,6 +217,16 @@ void CSpaceMonger::ScanPath(CString path)
 	CFolderTree *ft = (CFolderTree *)m_document;
 	if (path.IsEmpty()) return;
 
+	wchar_t fullpath[32768];
+	DWORD len = GetFullPathName(path, 32768, fullpath, NULL);
+	DWORD attrib = (len > 0 && len < 32768) ? GetFileAttributes(MakeLongPath(fullpath)) : INVALID_FILE_ATTRIBUTES;
+	if (attrib == INVALID_FILE_ATTRIBUTES || !(attrib & FILE_ATTRIBUTE_DIRECTORY)) {
+		CString message;
+		message.Format(CurLang->ex->openfailed, (LPCWSTR)path);
+		AfxMessageBox(message, MB_OK|MB_ICONEXCLAMATION);
+		return;
+	}
+
 	m_mainframe->EnableWindow(0);
 
 	if (ft->LoadTree(path, 1, m_mainframe)) {
@@ -211,10 +234,18 @@ void CSpaceMonger::ScanPath(CString path)
 		// that cancelling a rescan leaves the old one in place.
 		m_view->SetDocument(NULL);
 		m_view->SetDocument(m_document);
+		ft->FreeOldTree();			// The view has let go of it now
 		ft->UpdateAllViews();
+		ScanChanged();
 	}
 	m_mainframe->EnableWindow(1);
 	m_mainframe->SetActiveWindow();
+}
+
+void CSpaceMonger::ScanChanged(void)
+{
+	((CMainFrame *)m_mainframe)->m_toolbar.RefreshSearch();
+	if (m_largest != NULL) m_largest->Refresh();
 }
 
 void CSpaceMonger::OnFileRun(void)
@@ -238,7 +269,11 @@ void CSpaceMonger::OnFileExplore(void)
 	CFolderView *fv = (CFolderView *)m_view;
 	if (fv == NULL || fv->selected == NULL) return;
 
-	CString path = fv->GetFullPath(fv->selected);
+	ShowInExplorer(fv->GetFullPath(fv->selected));
+}
+
+void ShowInExplorer(const CString &path)
+{
 	PIDLIST_ABSOLUTE pidl = NULL;
 	if (SUCCEEDED(SHParseDisplayName(path, NULL, &pidl, 0, NULL))) {
 		SHOpenFolderAndSelectItems(pidl, 0, NULL, 0);
@@ -271,6 +306,28 @@ static BOOL RecyclePath(HWND owner, const CString &path)
 	return result;
 }
 
+// Hard links are counted once, on whichever name the scan found first.  If
+// that name is recycled, move the size to another name of the same file.
+static BOOL GiveSizeToOtherLink(CFolder *folder, ui64 fileid, ui64 size)
+{
+	if (folder == NULL) return 0;
+	for (unsigned int i = 0; i < folder->cur; i++) {
+		if (folder->children[i] != NULL) {
+			if (GiveSizeToOtherLink(folder->children[i], fileid, size)) return 1;
+		}
+		else if (folder->fileids[i] == fileid && folder->sizes[i] == 0) {
+			folder->sizes[i] = size;
+			folder->size_self += size;
+			for (CFolder *f = folder; f->parent != NULL; f = f->parent) {
+				f->parent->sizes[f->parentindex] += size;
+				f->parent->size_children += size;
+			}
+			return 1;
+		}
+	}
+	return 0;
+}
+
 void CSpaceMonger::OnFileDelete(void)
 {
 	CFolderView *fv = (CFolderView *)m_view;
@@ -295,6 +352,7 @@ void CSpaceMonger::OnFileDelete(void)
 
 	CFolder *folder = selected->source;
 	unsigned int index = selected->index;
+	ui64 fileid = isfolder ? 0 : folder->fileids[index];
 	if (isfolder) {
 		delete folder->children[index];
 		folder->children[index] = NULL;
@@ -310,12 +368,17 @@ void CSpaceMonger::OnFileDelete(void)
 		parent = parent->parent;
 	}
 	selected->source->sizes[index] = 0;
+	selected->source->fileids[index] = 0;
+
+	// If the file had other names (hard links), its space now belongs to one of them.
+	if (fileid != 0 && subsize != 0) GiveSizeToOtherLink(ft->GetRoot(), fileid, subsize);
 
 
+	// Rebuild the picture first: it may point into the folder just deleted.
+	fv->OnUpdate(m_document);
+	ScanChanged();
 	if (m_settings.auto_rescan)
 		OnFileRefresh();
-	else
-		fv->OnUpdate(m_document);
 }
 
 void CSpaceMonger::OnZoomIn(void)
@@ -356,6 +419,11 @@ void CSpaceMonger::OnSettings(void)
 		}
 		((CMainFrame *)m_mainframe)->m_toolbar.Reload();
 		((CMainFrame *)m_mainframe)->RecalcLayout(0);
+		if (m_largest != NULL) {
+			// Easiest way to pick up a new language: open it again.
+			m_largest->DestroyWindow();
+			CLargestDialog::ShowWindowFor(m_mainframe);
+		}
 
 		// The cloud-files option changes what a scan finds, so rescan.
 		CFolderTree *ft = (CFolderTree *)m_document;
@@ -382,6 +450,244 @@ void CSpaceMonger::OnFileProperties(void)
 	si.lpVerb = L"properties";
 	si.lpFile = (LPCTSTR)path;
 	ShellExecuteEx(&si);
+}
+
+void CSpaceMonger::OnViewLargest(void)
+{
+	CFolderTree *ft = (CFolderTree *)m_document;
+	if (ft == NULL || ft->GetRoot() == NULL) return;
+	CLargestDialog::ShowWindowFor(m_mainframe);
+}
+
+BOOL CSpaceMonger::IsElevated(void)
+{
+	static int elevated = -1;
+	if (elevated < 0) {
+		elevated = 0;
+		HANDLE token;
+		if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+			TOKEN_ELEVATION info;
+			DWORD size;
+			if (GetTokenInformation(token, TokenElevation, &info, sizeof(info), &size))
+				elevated = info.TokenIsElevated ? 1 : 0;
+			CloseHandle(token);
+		}
+	}
+	return elevated;
+}
+
+// Starts a second copy of SpaceMonger as administrator, scanning the same
+// place, and closes this one.  Windows asks the user first.
+void CSpaceMonger::OnFileRunAsAdmin(void)
+{
+	CFolderTree *ft = (CFolderTree *)m_document;
+	if (ft == NULL || ft->m_path.IsEmpty()) return;
+
+	wchar_t exe[MAX_PATH];
+	GetModuleFileName(NULL, exe, MAX_PATH);
+	// A trailing backslash would escape the closing quote, so double it.
+	CString path = ft->m_path;
+	if (path.Right(1) == L"\\") path += L"\\";
+	CString params = L"\"" + path + L"\"";
+
+	SHELLEXECUTEINFO si;
+	ZeroMemory(&si, sizeof(si));
+	si.cbSize = sizeof(si);
+	si.hwnd = m_mainframe->m_hWnd;
+	si.lpVerb = L"runas";
+	si.lpFile = exe;
+	si.lpParameters = params;
+	si.nShow = SW_SHOWNORMAL;
+	if (ShellExecuteEx(&si))
+		m_mainframe->PostMessage(WM_CLOSE);
+}
+
+BOOL CSpaceMonger::IsException(const CString &path)
+{
+	for (size_t i = 0; i < m_settings.exceptions.size(); i++)
+		if (!m_settings.exceptions[i].CompareNoCase(path)) return 1;
+	return 0;
+}
+
+void CSpaceMonger::AddException(const CString &path)
+{
+	if (IsException(path)) return;
+	m_settings.exceptions.push_back(path);
+	m_settings.Save();
+}
+
+void CSpaceMonger::RemoveException(const CString &path)
+{
+	for (size_t i = 0; i < m_settings.exceptions.size(); i++) {
+		if (!m_settings.exceptions[i].CompareNoCase(path)) {
+			m_settings.exceptions.erase(m_settings.exceptions.begin() + i);
+			break;
+		}
+	}
+	m_settings.Save();
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//  Export to a spreadsheet (CSV)
+
+class CCsvWriter {
+public:
+	CCsvWriter(HANDLE file) : m_file(file), m_ok(1) {
+		m_buffer.reserve(1 << 20);
+		m_buffer.append("\xEF\xBB\xBF");		// UTF-8 marker, so Excel reads accents right
+	}
+	~CCsvWriter() { Flush(); }
+
+	void Field(const CString &text, BOOL last = 0) {
+		BOOL quote = text.FindOneOf(L",\"\r\n") >= 0;
+		CString value = text;
+		if (quote) {
+			value.Replace(L"\"", L"\"\"");
+			value = L"\"" + value + L"\"";
+		}
+		int len = WideCharToMultiByte(CP_UTF8, 0, value, value.GetLength(), NULL, 0, NULL, NULL);
+		size_t at = m_buffer.size();
+		m_buffer.resize(at + len);
+		WideCharToMultiByte(CP_UTF8, 0, value, value.GetLength(), &m_buffer[at], len, NULL, NULL);
+		m_buffer.append(last ? "\r\n" : ",");
+		if (m_buffer.size() > (1 << 20) - 4096) Flush();
+	}
+	BOOL Flush(void) {
+		DWORD written;
+		if (!m_buffer.empty() && !WriteFile(m_file, m_buffer.data(), (DWORD)m_buffer.size(), &written, NULL))
+			m_ok = 0;
+		m_buffer.clear();
+		return m_ok;
+	}
+	BOOL Ok(void) const { return m_ok; }
+
+private:
+	HANDLE m_file;
+	std::string m_buffer;
+	BOOL m_ok;
+};
+
+static ui64 CountRows(CFolder *folder)
+{
+	ui64 rows = 0;
+	for (unsigned int i = 0; i < folder->cur; i++) {
+		if (IsSpecialName(folder->names[i])) continue;
+		rows++;
+		if (folder->children[i] != NULL) rows += CountRows(folder->children[i]);
+	}
+	return rows;
+}
+
+static CString FormatIsoDate(ui64 date)
+{
+	if (date == 0) return CString();
+	FILETIME local;
+	SYSTEMTIME st;
+	FileTimeToLocalFileTime((FILETIME *)&date, &local);
+	FileTimeToSystemTime(&local, &st);
+	CString result;
+	result.Format(L"%04d-%02d-%02d %02d:%02d:%02d", st.wYear, st.wMonth, st.wDay,
+		st.wHour, st.wMinute, st.wSecond);
+	return result;
+}
+
+static void WriteRows(CCsvWriter &csv, CFolder *folder, const CString &prefix)
+{
+	for (unsigned int i = 0; i < folder->cur && csv.Ok(); i++) {
+		if (IsSpecialName(folder->names[i])) continue;
+		CString path = prefix + folder->names[i];
+		BOOL isfolder = (folder->children[i] != NULL);
+		CString number;
+		csv.Field(path);
+		csv.Field(isfolder ? L"Folder" : L"File");
+		csv.Field(isfolder ? CString() : CString(CurLang->ex->typenames[GetFileType(folder->names[i])]));
+		number.Format(L"%I64u", folder->sizes[i]);
+		csv.Field(number);
+		csv.Field(FormatSizeText(folder->sizes[i]));
+		number.Format(L"%I64u", folder->actualsizes[i]);
+		csv.Field(number);
+		csv.Field((folder->attribs[i] & ENTRY_CLOUD_ONLY) ? L"Yes" : L"");
+		csv.Field(FormatIsoDate(folder->times[i]), 1);
+		if (isfolder) WriteRows(csv, folder->children[i], path + L"\\");
+	}
+}
+
+// Saves everything in the folder being viewed (and below it) as a CSV file.
+void CSpaceMonger::OnFileExport(void)
+{
+	CFolderView *fv = (CFolderView *)m_view;
+	CFolderTree *ft = (CFolderTree *)m_document;
+	if (fv == NULL || ft == NULL || fv->GetViewRoot() == NULL) return;
+
+	CFolder *root = fv->GetViewRoot();
+	CString rootpath = ft->m_path;
+	if (root->parent != NULL) {
+		rootpath = ft->GetFullPath(root->parent, root->parentindex) + L"\\";
+	}
+
+	ui64 rows = CountRows(root);
+	if (rows > 1048575) {
+		CString question;
+		question.Format(CurLang->ex->exportmany, (LPCWSTR)FormatCountText(rows));
+		if (AfxMessageBox(question, MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+	}
+
+	// Suggest a name like "SpaceMonger - C drive.csv" or "SpaceMonger - Downloads.csv".
+	CString name = rootpath;
+	name.TrimRight(L'\\');
+	int slash = name.ReverseFind(L'\\');
+	if (slash >= 0) name = name.Mid(slash + 1);
+	if (name.GetLength() == 2 && name[1] == L':') name = CString(name[0]) + L" drive";
+	name.Replace(L':', L'_');
+	name = L"SpaceMonger - " + name + L".csv";
+
+	IFileSaveDialog *dialog = NULL;
+	if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
+		return;
+	COMDLG_FILTERSPEC filter[] = { { L"CSV (Comma delimited)", L"*.csv" } };
+	dialog->SetFileTypes(1, filter);
+	dialog->SetDefaultExtension(L"csv");
+	dialog->SetFileName(name);
+	dialog->SetTitle(CurLang->ex->exporttitle);
+	CString filename;
+	if (SUCCEEDED(dialog->Show(m_mainframe->m_hWnd))) {
+		IShellItem *item = NULL;
+		if (SUCCEEDED(dialog->GetResult(&item))) {
+			PWSTR path = NULL;
+			if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+				filename = path;
+				CoTaskMemFree(path);
+			}
+			item->Release();
+		}
+	}
+	dialog->Release();
+	if (filename.IsEmpty()) return;
+
+	CWaitCursor wait;
+	HANDLE file = CreateFile(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	BOOL ok = (file != INVALID_HANDLE_VALUE);
+	if (ok) {
+		CCsvWriter csv(file);
+		csv.Field(L"Path");
+		csv.Field(L"Type");
+		csv.Field(L"Category");
+		csv.Field(L"Size on disk (bytes)");
+		csv.Field(L"Size on disk");
+		csv.Field(L"File size (bytes)");
+		csv.Field(L"Online-only");
+		csv.Field(L"Modified", 1);
+		WriteRows(csv, root, rootpath);
+		ok = csv.Flush();
+		CloseHandle(file);
+	}
+	if (!ok) {
+		AfxMessageBox(CurLang->ex->exportfailed, MB_OK|MB_ICONEXCLAMATION);
+		return;
+	}
+	CString done;
+	done.Format(CurLang->ex->exportdone, (LPCWSTR)FormatCountText(rows), (LPCWSTR)filename);
+	AfxMessageBox(done, MB_OK|MB_ICONINFORMATION);
 }
 
 void CSpaceMonger::OnAbout()
@@ -456,6 +762,7 @@ void CCurrentSettings::Reset(void)
 	save_pos = 0;
 	skip_cloud_only = 0;
 	theme = THEME_SYSTEM;
+	exceptions.clear();
 	lang[0] = L'u';
 	lang[1] = L's';
 	lang[2] = L'\0';
@@ -504,6 +811,16 @@ void CCurrentSettings::Load(void)
 	ReadDword(key, L"window_showcmd", &showcmd);
 	ReadDword(key, L"skip_cloud_only", &skip_cloud_only);
 	ReadDword(key, L"theme", &theme);
+	exceptions.clear();
+	DWORD listsize = 0, listtype;
+	if (RegQueryValueEx(key, L"exceptions", NULL, &listtype, NULL, &listsize) == ERROR_SUCCESS
+		&& listtype == REG_MULTI_SZ && listsize > 0) {
+		std::vector<wchar_t> list(listsize / sizeof(wchar_t) + 2, L'\0');
+		if (RegQueryValueEx(key, L"exceptions", NULL, &listtype, (BYTE *)list.data(), &listsize) == ERROR_SUCCESS) {
+			for (const wchar_t *p = list.data(); *p != L'\0'; p += wcslen(p) + 1)
+				exceptions.push_back(p);
+		}
+	}
 	DWORD size = sizeof(lang) - sizeof(wchar_t), type;
 	wchar_t langbuf[4] = { 0 };
 	if (RegQueryValueEx(key, L"lang", NULL, &type, (BYTE *)langbuf, &size) == ERROR_SUCCESS
@@ -514,7 +831,7 @@ void CCurrentSettings::Load(void)
 	if (density < -3) density = -3;
 	if (density > 3) density = 3;
 
-	if (file_color < 0 || file_color > 11) file_color = 0;
+	if (file_color < 0 || file_color > FILE_COLOR_BY_TYPE) file_color = 0;
 	if (folder_color < 0 || folder_color > 11) folder_color = 0;
 
 	auto_rescan = !!auto_rescan;
@@ -611,6 +928,15 @@ void CCurrentSettings::Save(void)
 	WriteDword(key, L"window_showcmd", &showcmd);
 	WriteDword(key, L"skip_cloud_only", &skip_cloud_only);
 	WriteDword(key, L"theme", &theme);
+	std::vector<wchar_t> list;
+	for (size_t i = 0; i < exceptions.size(); i++) {
+		list.insert(list.end(), (LPCWSTR)exceptions[i], (LPCWSTR)exceptions[i] + exceptions[i].GetLength());
+		list.push_back(L'\0');
+	}
+	list.push_back(L'\0');
+	if (list.size() < 2) list.push_back(L'\0');
+	RegSetValueEx(key, L"exceptions", 0, REG_MULTI_SZ, (const BYTE *)list.data(),
+		(DWORD)(list.size() * sizeof(wchar_t)));
 	RegSetValueEx(key, L"lang", 0, REG_SZ, (const BYTE *)lang, 3 * sizeof(wchar_t));
 	RegCloseKey(key);
 }
