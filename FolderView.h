@@ -82,7 +82,10 @@ protected:
 	void ClearDisplayFolders(void);
 	void DrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL selected);
 	void MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL selected);
-	void AnimateBox(const CRect &start, const CRect &end);
+	void ZoomTo(CFolder *newroot, int newzoomlevel);
+	CRect FindZoomTarget(CFolder *oldroot);
+	void RenderToBitmap(CBitmap &bitmap);
+	void AnimateZoom(CBitmap &oldpicture, const CRect &box, BOOL zoomin);
 	void SetupInfoTip(CDisplayFolder *cur);
 	void SetupNameTip(CDisplayFolder *cur);
 	ui64 GetPercentBase(void);

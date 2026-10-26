@@ -356,21 +356,11 @@ void CFolderView::OnMouseMove(UINT nFlags, CPoint point)
 	lastcur = cur;
 }
 
+static CString GetSizeString(ui64 size, ui64 totalspace, BOOL percent);
+
 static void PrintFileSize(CString &string, ui64 size)
 {
-	wchar_t sizebuf[64];
-	wchar_t *dest = sizebuf+63;
-	int ctr = 0;
-	sizebuf[63] = L'\0';
-	if (size == 0) *--dest = L'0';
-	while (size != 0) {
-		if (++ctr == 4) *--dest = CurLang->digitcomma, ctr = 1;
-		*--dest = (wchar_t)(size % 10) + L'0';
-		size /= 10;
-	}
-	string += dest;
-	string += L" ";
-	string += CurLang->bytes;
+	string += GetSizeString(size, 0, 0);
 }
 
 static CString FormatCount(ui64 value)
@@ -624,7 +614,8 @@ static CString GetSizeString(ui64 size, ui64 totalspace, BOOL percent)
 
 		ui32 displayfull = (ui32)(size / unit);
 		ui32 displayfractional = (ui32)(10 * (size % unit) / unit);
-		result.Format(CurLang->size_format, displayfull, displayfractional, displaytype);
+		if (unit == 1) result.Format(L"%lu %s", displayfull, displaytype);
+		else result.Format(CurLang->size_format, displayfull, displayfractional, displaytype);
 	}
 
 	return result;
@@ -1115,65 +1106,60 @@ void CFolderView::ZoomIn(CDisplayFolder *folder)
 
 	if (rootfolder == oldroot) return;
 
-	CRect start(folder->x, folder->y,
-		folder->x+folder->w, folder->y+folder->h);
-	CRect end;
-	GetClientRect(&end);
-	end.OffsetRect(-end.left, -end.top);
-	if (theApp.m_settings.animated_zoom) AnimateBox(start, end);
+	CRect start(folder->x, folder->y, folder->x+folder->w, folder->y+folder->h);
+	CBitmap oldpicture;
+	if (theApp.m_settings.animated_zoom) RenderToBitmap(oldpicture);
 
 	CFolder *parent = rootfolder->parent;
 	zoomlevel = 0;
 	while (parent != NULL) zoomlevel++, parent = parent->parent;
+
+	if (theApp.m_settings.animated_zoom) AnimateZoom(oldpicture, start, 1);
 	OnUpdate(doc);
-	UpdateTitleBar();
 }
 
-void CFolderView::ZoomOut(void)
+// Finds where the folder we were looking at sits in the new (zoomed-out)
+// picture, so the animation can shrink back into it.
+CRect CFolderView::FindZoomTarget(CFolder *oldroot)
+{
+	for (CFolder *folder = oldroot; folder != NULL && folder != rootfolder; folder = folder->parent) {
+		for (CDisplayFolder *cur = displayfolders; cur != NULL; cur = cur->next) {
+			if (cur->source == folder->parent && cur->index == folder->parentindex
+				&& cur->name != NULL)
+				return CRect(cur->x, cur->y, cur->x + cur->w, cur->y + cur->h);
+		}
+	}
+	return CRect(m_width / 2, m_height / 2, m_width / 2 + 1, m_height / 2 + 1);
+}
+
+void CFolderView::ZoomTo(CFolder *newroot, int newzoomlevel)
 {
 	CFolderTree *doc = (CFolderTree *)GetDocument();
 	CFolder *oldroot = rootfolder;
 
-	if (rootfolder != NULL && rootfolder->parent != NULL)
-		rootfolder = rootfolder->parent;
+	if (newroot == NULL || newroot == oldroot) return;
 
-	if (rootfolder == oldroot) return;
+	CBitmap oldpicture;
+	if (theApp.m_settings.animated_zoom) RenderToBitmap(oldpicture);
 
-	CRect start;
-	GetClientRect(&start);
-	start.OffsetRect(-start.left, -start.top);
-	CRect end;
-	end.left = end.right = start.right / 2;
-	end.top = end.bottom = start.bottom / 2;
-	if (theApp.m_settings.animated_zoom) AnimateBox(start, end);
+	rootfolder = newroot;
+	zoomlevel = newzoomlevel;
+	OnSize(0, m_width, m_height);
 
-	zoomlevel--;
+	if (theApp.m_settings.animated_zoom) AnimateZoom(oldpicture, FindZoomTarget(oldroot), 0);
 	OnUpdate(doc);
-	UpdateTitleBar();
+}
+
+void CFolderView::ZoomOut(void)
+{
+	if (rootfolder != NULL && rootfolder->parent != NULL)
+		ZoomTo(rootfolder->parent, zoomlevel - 1);
 }
 
 void CFolderView::ZoomFull(void)
 {
 	CFolderTree *doc = (CFolderTree *)GetDocument();
-	CFolder *oldroot = rootfolder;
-
-	if (doc != NULL)
-		rootfolder = ((CFolderTree *)doc)->GetRoot();
-	else rootfolder = NULL;
-
-	if (rootfolder == oldroot) return;
-
-	CRect start;
-	GetClientRect(&start);
-	start.OffsetRect(-start.left, -start.top);
-	CRect end;
-	end.left = end.right = start.right / 2;
-	end.top = end.bottom = start.bottom / 2;
-	if (theApp.m_settings.animated_zoom) AnimateBox(start, end);
-
-	zoomlevel = 0;
-	OnUpdate(doc);
-	UpdateTitleBar();
+	if (doc != NULL) ZoomTo(doc->GetRoot(), 0);
 }
 
 void CFolderView::ShowFreeSpace(BOOL shown)
@@ -1183,50 +1169,85 @@ void CFolderView::ShowFreeSpace(BOOL shown)
 	OnUpdate(GetDocument());
 }
 
-static void ComputeNewRect(CRect &result, const CRect &start, const CRect &end, ui32 max, ui32 step)
+// Draws the view, as it is laid out right now, into a bitmap.
+void CFolderView::RenderToBitmap(CBitmap &bitmap)
 {
-	if (max <= 0) max = 1;
-	result.left = ((start.left * (max - step)) + (end.left * step)) / max;
-	result.top = ((start.top * (max - step)) + (end.top * step)) / max;
-	result.right = ((start.right * (max - step)) + (end.right * step)) / max;
-	result.bottom = ((start.bottom * (max - step)) + (end.bottom * step)) / max;
+	CClientDC dc(this);
+	bitmap.CreateCompatibleBitmap(&dc, m_width, m_height);
+	CDC memdc;
+	memdc.CreateCompatibleDC(&dc);
+	CBitmap *old = memdc.SelectObject(&bitmap);
+	OnDraw(&memdc);
+	memdc.SelectObject(old);
 }
 
-static void MinimalRect(CDC *dc, const CRect &rect)
+static CRect LerpRect(const CRect &a, const CRect &b, double t)
 {
-	dc->MoveTo(rect.left, rect.top);
-	dc->LineTo(rect.right, rect.top);
-	dc->LineTo(rect.right, rect.bottom);
-	dc->LineTo(rect.left, rect.bottom);
-	dc->LineTo(rect.left, rect.top);
+	return CRect((int)(a.left + (b.left - a.left) * t), (int)(a.top + (b.top - a.top) * t),
+		(int)(a.right + (b.right - a.right) * t), (int)(a.bottom + (b.bottom - a.bottom) * t));
 }
 
-void CFolderView::AnimateBox(const CRect &start, const CRect &end)
-{
-	// Total time of animation: 400 milliseconds + render time, or
-	// about a half a second.
+// AnimateZoom
+//   Zooming in, the old picture grows smoothly until "box" fills the view.
+//   Zooming out, the old picture shrinks smoothly into "box" in the new
+//   picture (which must already be laid out), fading as it goes.
 
-	ui32 step;
-	CRect rect = start;
-	CDC *dc = GetDC();
-	CPen pen(PS_SOLID, Px(1), RGB(0, 0, 0));
-	CPen *oldpen = dc->SelectObject(&pen);
-	dc->SetROP2(R2_NOT);
-	for (step = 0; step < 8; step++) {
-		ComputeNewRect(rect, start, end, 8, step);
-		MinimalRect(dc, rect);
-		GdiFlush();
-		Sleep(25);
+void CFolderView::AnimateZoom(CBitmap &oldpicture, const CRect &box, BOOL zoomin)
+{
+	const double duration = 280.0;	// milliseconds
+	if (box.Width() <= 0 || box.Height() <= 0 || m_width <= 0 || m_height <= 0) return;
+
+	CClientDC dc(this);
+	CRect full(0, 0, m_width, m_height);
+
+	CDC olddc, newdc, backdc;
+	olddc.CreateCompatibleDC(&dc);
+	newdc.CreateCompatibleDC(&dc);
+	backdc.CreateCompatibleDC(&dc);
+	CBitmap newpicture, back;
+	back.CreateCompatibleBitmap(&dc, m_width, m_height);
+	CBitmap *oldsel1 = olddc.SelectObject(&oldpicture);
+	CBitmap *oldsel3 = backdc.SelectObject(&back);
+	CBitmap *oldsel2 = NULL;
+	if (!zoomin) {
+		RenderToBitmap(newpicture);
+		oldsel2 = newdc.SelectObject(&newpicture);
 	}
-	for (step = 0; step < 8; step++) {
-		ComputeNewRect(rect, start, end, 8, step);
-		MinimalRect(dc, rect);
+	backdc.SetStretchBltMode(COLORONCOLOR);
+
+	ULONGLONG start = GetTickCount64();
+	for (;;) {
+		double t = (GetTickCount64() - start) / duration;
+		if (t > 1.0) t = 1.0;
+		double k = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);		// Ease out
+
+		if (zoomin) {
+			// Where "box" is drawn this frame, and the matching part of the
+			// old picture that fills the whole view.
+			CRect dest = LerpRect(box, full, k);
+			double sx = (double)box.Width() / dest.Width(), sy = (double)box.Height() / dest.Height();
+			int srcx = (int)(box.left - dest.left * sx), srcy = (int)(box.top - dest.top * sy);
+			backdc.StretchBlt(0, 0, m_width, m_height, &olddc, srcx, srcy,
+				(int)(m_width * sx), (int)(m_height * sy), SRCCOPY);
+		}
+		else {
+			backdc.BitBlt(0, 0, m_width, m_height, &newdc, 0, 0, SRCCOPY);
+			CRect dest = LerpRect(full, box, k);
+			if (dest.Width() > 0 && dest.Height() > 0) {
+				BLENDFUNCTION blend = { AC_SRC_OVER, 0, (BYTE)(255 * (1.0 - 0.6 * k)), 0 };
+				::AlphaBlend(backdc.m_hDC, dest.left, dest.top, dest.Width(), dest.Height(),
+					olddc.m_hDC, 0, 0, m_width, m_height, blend);
+			}
+		}
+		dc.BitBlt(0, 0, m_width, m_height, &backdc, 0, 0, SRCCOPY);
 		GdiFlush();
-		Sleep(25);
+		if (t >= 1.0) break;
+		DwmFlush();		// Wait for the next screen refresh
 	}
-	dc->SetROP2(R2_COPYPEN);
-	dc->SelectObject(oldpen);
-	ReleaseDC(dc);
+
+	olddc.SelectObject(oldsel1);
+	if (oldsel2 != NULL) newdc.SelectObject(oldsel2);
+	backdc.SelectObject(oldsel3);
 }
 
 void CFolderView::OnIgnoreUpdate(CCmdUI *ui)
