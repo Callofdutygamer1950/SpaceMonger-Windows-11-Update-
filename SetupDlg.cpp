@@ -11,6 +11,8 @@ BEGIN_MESSAGE_MAP(CSettingsDialog, CDialog)
 	ON_BN_CLICKED(IDC_SHOW_NAME_TIPS, OnShowNameTips)
 	ON_BN_CLICKED(IDC_SHOW_INFO_TIPS, OnShowInfoTips)
 	ON_CBN_SELENDOK(IDC_LANG, OnLang)
+	ON_WM_CTLCOLOR()
+	ON_WM_ERASEBKGND()
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
@@ -61,6 +63,13 @@ void CSettingsDialog::OnOK(void)
 	if (save_pos != NULL)
 		theApp.m_settings.save_pos = save_pos->GetCheck();
 
+	CButton *skip_cloud = (CButton *)GetDlgItem(IDC_SKIP_CLOUD);
+	if (skip_cloud != NULL)
+		theApp.m_settings.skip_cloud_only = skip_cloud->GetCheck();
+	CComboBox *theme = (CComboBox *)GetDlgItem(IDC_THEME);
+	if (theme != NULL && theme->GetCurSel() >= 0)
+		theApp.m_settings.theme = theme->GetCurSel();
+
 	CButton *show_tips = (CButton *)GetDlgItem(IDC_SHOW_NAME_TIPS);
 	if (show_tips != NULL)
 		theApp.m_settings.show_name_tips = show_tips->GetCheck();
@@ -77,7 +86,7 @@ void CSettingsDialog::OnOK(void)
 	if (nametipdelay != NULL) {
 		CString string;
 		nametipdelay->GetWindowText(string);
-		theApp.m_settings.nametip_delay = atoi(string);
+		theApp.m_settings.nametip_delay = _wtoi(string);
 	}
 
 	if ((tip = (CButton *)GetDlgItem(IDC_INFOTIP_PATH)) != NULL && tip->GetCheck())
@@ -96,7 +105,7 @@ void CSettingsDialog::OnOK(void)
 	if (infotipdelay != NULL) {
 		CString string;
 		infotipdelay->GetWindowText(string);
-		theApp.m_settings.infotip_delay = atoi(string);
+		theApp.m_settings.infotip_delay = _wtoi(string);
 	}
 
 	CDialog::OnOK();
@@ -157,8 +166,8 @@ void CSettingsDialog::OnLang(void)
 	int index = lang->GetCurSel();
 	theApp.m_settings.lang[0] = Langs[index].abbrev[0];
 	theApp.m_settings.lang[1] = Langs[index].abbrev[1];
-	theApp.m_settings.lang[2] = '\0';
-	theApp.m_settings.lang[3] = '\0';
+	theApp.m_settings.lang[2] = L'\0';
+	theApp.m_settings.lang[3] = L'\0';
 	CurLang = Langs[index].text;
 	UpdateDialogForNewLanguage();
 }
@@ -208,6 +217,22 @@ void CSettingsDialog::UpdateDialogForNewLanguage(void)
 	SetDlgItemText(IDC_DISABLE_DELETE, CurLang->disabledelete);
 	SetDlgItemText(IDC_ANIMATED, CurLang->animatedzoom);
 	SetDlgItemText(IDC_SAVE_POS, CurLang->savepos);
+	SetDlgItemText(IDC_STATIC_SCANOPTIONS, CurLang->scanoptions);
+	SetDlgItemText(IDC_SKIP_CLOUD, CurLang->skipcloudonly);
+	SetDlgItemText(IDC_STATIC_THEME, CurLang->theme);
+
+	CButton *skip_cloud = (CButton *)GetDlgItem(IDC_SKIP_CLOUD);
+	if (skip_cloud != NULL)
+		skip_cloud->SetCheck(theApp.m_settings.skip_cloud_only);
+	CComboBox *theme = (CComboBox *)GetDlgItem(IDC_THEME);
+	if (theme != NULL) {
+		int sel = theme->GetCurSel();
+		if (sel < 0) sel = theApp.m_settings.theme;
+		theme->ResetContent();
+		for (int t = 0; t < 3; t++)
+			theme->AddString(CurLang->themenames[t]);
+		theme->SetCurSel(sel);
+	}
 
 	if (lang != NULL) {
 		for (i = 0; Langs[i].name != NULL; i++) {
@@ -273,13 +298,13 @@ void CSettingsDialog::UpdateDialogForNewLanguage(void)
 	CEdit *tipdelay = (CEdit *)GetDlgItem(IDC_NAMETIP_DELAY);
 	if (tipdelay != NULL) {
 		CString string;
-		string.Format("%u", theApp.m_settings.nametip_delay);
+		string.Format(L"%u", theApp.m_settings.nametip_delay);
 		tipdelay->SetWindowText(string);
 	}
 	tipdelay = (CEdit *)GetDlgItem(IDC_INFOTIP_DELAY);
 	if (tipdelay != NULL) {
 		CString string;
-		string.Format("%u", theApp.m_settings.infotip_delay);
+		string.Format(L"%u", theApp.m_settings.infotip_delay);
 		tipdelay->SetWindowText(string);
 	}
 	EnableNameTipButtons(theApp.m_settings.show_name_tips);
@@ -301,10 +326,26 @@ BOOL CSettingsDialog::OnInitDialog()
 	oldlang[3] = theApp.m_settings.lang[3];
 	oldlangptr = CurLang;
 
-	UpdateDialogForNewLanguage();
-
 	CDialog::OnInitDialog();
 
+	UpdateDialogForNewLanguage();
+	Theme_ApplyToWindow(m_hWnd);
+
 	return TRUE;
+}
+
+HBRUSH CSettingsDialog::OnCtlColor(CDC *pDC, CWnd *pWnd, UINT nCtlColor)
+{
+	HBRUSH brush = Theme_OnCtlColor(pDC->m_hDC, pWnd->m_hWnd, nCtlColor);
+	return brush != NULL ? brush : CDialog::OnCtlColor(pDC, pWnd, nCtlColor);
+}
+
+BOOL CSettingsDialog::OnEraseBkgnd(CDC *pDC)
+{
+	if (!Theme_IsDark()) return CDialog::OnEraseBkgnd(pDC);
+	CRect rect;
+	GetClientRect(&rect);
+	pDC->FillRect(&rect, CBrush::FromHandle(Theme_Brush(COLOR_WINDOW)));
+	return 1;
 }
 

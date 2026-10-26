@@ -15,6 +15,8 @@ protected:
 	virtual void OnShowNameTips();
 	virtual void OnShowInfoTips();
 	virtual void OnLang();
+	afx_msg HBRUSH OnCtlColor(CDC *pDC, CWnd *pWnd, UINT nCtlColor);
+	afx_msg BOOL OnEraseBkgnd(CDC *pDC);
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 
@@ -25,7 +27,7 @@ protected:
 	void EnableInfoTipButtons(BOOL bEnable);
 
 protected:
-	char oldlang[4];
+	wchar_t oldlang[4];
 	Lang *oldlangptr;
 };
 

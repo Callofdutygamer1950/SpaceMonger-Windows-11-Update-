@@ -78,6 +78,29 @@ static COLORREF FixedColors[] = {
 	PALETTERGB(0xBF, 0x7F, 0xBF),
 };
 
+// In dark mode, the boxes use deeper versions of the same colors, with
+// light text, so the view isn't a wall of bright pastels.
+static COLORREF ThemeBoxColor(COLORREF color)
+{
+	if (!Theme_IsDark()) return color;
+	return RGB(GetRValue(color) * 9 / 20, GetGValue(color) * 9 / 20, GetBValue(color) * 9 / 20);
+}
+
+static COLORREF ThemeBoxTextColor(void)
+{
+	return Theme_IsDark() ? RGB(0xEB, 0xEB, 0xEB) : RGB(0, 0, 0);
+}
+
+static COLORREF ThemeSelectedColor(void)
+{
+	return Theme_IsDark() ? RGB(0xE6, 0xE6, 0xE6) : RGB(0, 0, 0);
+}
+
+static COLORREF ThemeSelectedTextColor(void)
+{
+	return Theme_IsDark() ? RGB(0, 0, 0) : RGB(0xFF, 0xFF, 0xFF);
+}
+
 CFolderView::CFolderView()
 {
 	rootfolder = NULL;
@@ -86,6 +109,10 @@ CFolderView::CFolderView()
 	zoomlevel = 0;
 	showfreespace = 1;
 	lastcur = NULL;
+	m_dpi = 96;
+	m_border = 3;
+	m_line = 12;
+	vmin = hmin = 0;
 }
 
 CFolderView::~CFolderView()
@@ -96,6 +123,8 @@ CFolderView::~CFolderView()
 BEGIN_MESSAGE_MAP(CFolderView, CFreeView)
 	//{{AFX_MSG_MAP(CFolderView)
 	ON_WM_SIZE()
+	ON_WM_PAINT()
+	ON_WM_ERASEBKGND()
 	ON_WM_LBUTTONDOWN()
 	ON_WM_LBUTTONDBLCLK()
 	ON_WM_RBUTTONUP()
@@ -127,13 +156,13 @@ BOOL CFolderView::OnWndMsg(UINT message, WPARAM wParam, LPARAM lParam, LRESULT *
 	return CFreeView::OnWndMsg(message, wParam, lParam, pResult);
 }
 
-int CFolderView::OnCreate(LPCREATESTRUCT lpCreateStruct) 
+int CFolderView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
 	if (CFreeView::OnCreate(lpCreateStruct) == -1)
 		return -1;
 	if (!m_infotipwnd.CreateEz(this, 64, 64)) return -1;
 	if (!m_nametipwnd.CreateEz(this, 64, 64)) return -1;
-	
+
 	int i;
 	LOGPALETTE *logpalette = (LOGPALETTE *)malloc(sizeof(LOGPALETTE) + 26 * sizeof(PALETTEENTRY));
 	logpalette->palVersion = 0x300;
@@ -145,34 +174,51 @@ int CFolderView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		logpalette->palPalEntry[i].peBlue = GetBValue(BoxColors[i]);
 	}
 	m_palette.CreatePalette(logpalette);
-	delete logpalette;
+	free(logpalette);
 
 	black.CreateSolidBrush(RGB(0x00, 0x00, 0x00));
 	white.CreateSolidBrush(RGB(0xFF, 0xFF, 0xFF));
-
-	minifont.CreateFont(-9, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET,
-		OUT_RASTER_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-		VARIABLE_PITCH|FF_SWISS, "Small Fonts");
 
 	m_infotipwnd.SetAutoShow(1);
 	m_infotipwnd.SetAutoPos(1);
 	m_infotipwnd.SetShowDelay(theApp.m_settings.infotip_delay);
 	m_infotipwnd.EnableWindow(0);
 
-	HFONT nametipfont = ::CreateFont(-9, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET,
-		OUT_RASTER_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-		VARIABLE_PITCH|FF_SWISS, "Small Fonts");
-	::SendMessage(m_nametipwnd.m_hWnd, WM_SETFONT, (WPARAM)nametipfont, 0);
 	m_nametipwnd.SetAutoShow(1);
 	m_nametipwnd.SetShowDelay(theApp.m_settings.nametip_delay);
 	m_nametipwnd.SetVPadding(0);
 	m_nametipwnd.SetHPadding(1);
 	m_nametipwnd.EnableWindow(0);
 
+	UpdateMetrics();
+
 	return 0;
 }
 
-void CFolderView::OnDestroy() 
+// UpdateMetrics
+//   Recreates the fonts and recomputes the layout sizes for the current DPI.
+
+void CFolderView::UpdateMetrics(void)
+{
+	m_dpi = Dpi_ForWindow(m_hWnd);
+
+	if (minifont.m_hObject != NULL) minifont.DeleteObject();
+	minifont.Attach(Dpi_CreateUIFont(m_dpi, 7));
+
+	CClientDC dc(this);
+	CFont *oldfont = dc.SelectObject(&minifont);
+	TEXTMETRIC tm;
+	dc.GetTextMetrics(&tm);
+	dc.SelectObject(oldfont);
+	m_line = tm.tmHeight;
+	m_border = Px(3);
+
+	// The tip windows own (and delete) the fonts they're given.
+	::SendMessage(m_nametipwnd.m_hWnd, WM_SETFONT, (WPARAM)Dpi_CreateUIFont(m_dpi, 7), 0);
+	::SendMessage(m_infotipwnd.m_hWnd, WM_SETFONT, (WPARAM)Dpi_CreateUIFont(m_dpi, 9), 0);
+}
+
+void CFolderView::OnDestroy()
 {
 	m_palette.DeleteObject();
 	black.DeleteObject();
@@ -193,8 +239,8 @@ CDisplayFolder *CFolderView::GetDisplayFolderFromPoint(const CPoint &point)
 		if (point.x > cur->x && point.y > cur->y
 			&& point.x < cur->x + cur->w && point.y < cur->y + cur->h) {
 			if (cur->flags & 1) {
-				if (point.x < cur->x+3 || point.y < cur->y+12
-					|| point.x > cur->x+cur->w-3 || point.y > cur->y+cur->h-3)
+				if (point.x < cur->x+m_border || point.y < cur->y+m_border+m_line
+					|| point.x > cur->x+cur->w-m_border || point.y > cur->y+cur->h-m_border)
 					break;
 			}
 			else break;
@@ -204,7 +250,7 @@ CDisplayFolder *CFolderView::GetDisplayFolderFromPoint(const CPoint &point)
 
 	if (cur != NULL && cur->name == NULL)
 		cur = NULL;
-	if (cur != NULL && cur->name[0] == '<')
+	if (cur != NULL && cur->name[0] == L'<')
 		cur = NULL;
 
 	return cur;
@@ -239,12 +285,11 @@ void CFolderView::HighlightPathAtPoint(const CPoint &point)
 	CDisplayFolder *cur = displayfolders;
 
 	CDC *pDC = GetDC();
-	pDC->SelectObject(&minifont);
+	CFont *oldfont = pDC->SelectObject(&minifont);
 	pDC->SetBkMode(TRANSPARENT);
 	pDC->SetTextAlign(TA_LEFT | TA_TOP | TA_NOUPDATECP);
-	pDC->SelectPalette(&m_palette, 0);
 	while (cur != NULL) {
-		if (cur->name != NULL && cur->name[0] != '<') {
+		if (cur->name != NULL && cur->name[0] != L'<') {
 			if (point.x > cur->x && point.y > cur->y
 				&& point.x < cur->x + cur->w && point.y < cur->y + cur->h) {
 				if (!(cur->flags & 4)) {
@@ -261,6 +306,7 @@ void CFolderView::HighlightPathAtPoint(const CPoint &point)
 		}
 		cur = cur->next;
 	}
+	pDC->SelectObject(oldfont);
 	ReleaseDC(pDC);
 }
 
@@ -278,14 +324,7 @@ void CFolderView::OnLButtonDblClk(UINT flags, CPoint point)
 
 	if (cur != NULL) {
 		if (cur->flags & 1) ZoomIn(cur);
-		else {
-			CString title, path;
-			title += ((CFolderTree *)GetDocument())->m_path;
-			BuildTitleReverse(selected->source, title);
-			path = title;
-			title += selected->source->names[selected->index];
-			ShellExecute(NULL, NULL, title, NULL, path, SW_SHOWDEFAULT);
-		}
+		else theApp.OnFileRun();
 	}
 	lastcur = NULL;
 	OnMouseMove(flags, point);
@@ -319,31 +358,53 @@ void CFolderView::OnMouseMove(UINT nFlags, CPoint point)
 
 static void PrintFileSize(CString &string, ui64 size)
 {
-	char sizebuf[256];
-	char *dest = sizebuf+255;
+	wchar_t sizebuf[64];
+	wchar_t *dest = sizebuf+63;
 	int ctr = 0;
-	sizebuf[255] = '\0';
+	sizebuf[63] = L'\0';
+	if (size == 0) *--dest = L'0';
 	while (size != 0) {
 		if (++ctr == 4) *--dest = CurLang->digitcomma, ctr = 1;
-		*--dest = (char)(size % 10) + '0';
+		*--dest = (wchar_t)(size % 10) + L'0';
 		size /= 10;
 	}
 	string += dest;
-	string += " ";
+	string += L" ";
 	string += CurLang->bytes;
+}
+
+static CString FormatCount(ui64 value)
+{
+	CString result;
+	result.Format(L"%I64u", value);
+	for (int pos = result.GetLength() - 3; pos > 0; pos -= 3)
+		result.Insert(pos, CurLang->digitcomma);
+	return result;
 }
 
 static void PrintDate(CString &string, ui64 date)
 {
 	CString tempstring;
 	SYSTEMTIME mtime;
-	FileTimeToSystemTime((FILETIME *)&date, &mtime);
+	FILETIME local;
+	FileTimeToLocalFileTime((FILETIME *)&date, &local);
+	FileTimeToSystemTime(&local, &mtime);
 	if (mtime.wMonth < 1 || mtime.wMonth > 12) mtime.wMonth = 1;
-	if (mtime.wDayOfWeek < 0 || mtime.wDayOfWeek > 6) mtime.wDayOfWeek = 0;
-	tempstring.Format("%02d %s %04d   %d:%02d:%02d",
+	tempstring.Format(L"%02d %s %04d   %d:%02d:%02d",
 		mtime.wDay, CurLang->monthnames[mtime.wMonth-1], mtime.wYear,
 		mtime.wHour, mtime.wMinute, mtime.wSecond);
 	string += tempstring;
+}
+
+CString CFolderView::GetFullPath(CDisplayFolder *cur)
+{
+	CString path;
+	CFolderTree *ft = (CFolderTree *)GetDocument();
+	if (cur == NULL || ft == NULL) return path;
+	path = ft->m_path;
+	BuildTitleReverse(cur->source, path);
+	path += cur->source->names[cur->index];
+	return path;
 }
 
 void CFolderView::SetupInfoTip(CDisplayFolder *cur)
@@ -361,50 +422,55 @@ void CFolderView::SetupInfoTip(CDisplayFolder *cur)
 	path += ft->m_path;
 	BuildTitleReverse(cur->source, tempstring);
 	path += tempstring;
+	CString fullpath = path + cur->source->names[cur->index];
 
-	// Load in the file's information using FindFirstFile.
-	WIN32_FIND_DATA info;
-	HANDLE handle = FindFirstFile(path+cur->source->names[cur->index], &info);
-	FindClose(handle);
+	// Load in the file's attributes.
+	WIN32_FILE_ATTRIBUTE_DATA info;
+	if (!GetFileAttributesEx(MakeLongPath(fullpath), GetFileExInfoStandard, &info))
+		info.dwFileAttributes = 0;
 
 	if (theApp.m_settings.infotip_flags & TIP_PATH)
 		string += path;
 	if (theApp.m_settings.infotip_flags & TIP_NAME)
 		string += cur->source->names[cur->index];
 	if (theApp.m_settings.infotip_flags & (TIP_NAME|TIP_PATH))
-		string += '\n';
+		string += L'\n';
 	if (theApp.m_settings.infotip_flags & TIP_SIZE)
 		PrintFileSize(string, cur->source->actualsizes[cur->index]);
 	if (theApp.m_settings.infotip_flags & TIP_ATTRIB) {
 		if ((theApp.m_settings.infotip_flags & TIP_SIZE)
-			&& info.dwFileAttributes != 0) string += "  /  ";
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE)			string += " ", string += CurLang->attribnames[0];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED)		string += " ", string += CurLang->attribnames[1];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)		string += " ", string += CurLang->attribnames[2];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_ENCRYPTED)		string += " ", string += CurLang->attribnames[3];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)			string += " ", string += CurLang->attribnames[4];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE)			string += " ", string += CurLang->attribnames[5];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_READONLY)		string += " ", string += CurLang->attribnames[6];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)	string += " ", string += CurLang->attribnames[7];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)		string += " ", string += CurLang->attribnames[8];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM)			string += " ", string += CurLang->attribnames[9];
-		if (info.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY)		string += " ", string += CurLang->attribnames[10];
+			&& info.dwFileAttributes != 0) string += L"  /  ";
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE)			string += L" ", string += CurLang->attribnames[0];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_COMPRESSED)		string += L" ", string += CurLang->attribnames[1];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)		string += L" ", string += CurLang->attribnames[2];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_ENCRYPTED)		string += L" ", string += CurLang->attribnames[3];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)			string += L" ", string += CurLang->attribnames[4];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_OFFLINE)			string += L" ", string += CurLang->attribnames[5];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_READONLY)		string += L" ", string += CurLang->attribnames[6];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)	string += L" ", string += CurLang->attribnames[7];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE)		string += L" ", string += CurLang->attribnames[8];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM)			string += L" ", string += CurLang->attribnames[9];
+		if (info.dwFileAttributes & FILE_ATTRIBUTE_TEMPORARY)		string += L" ", string += CurLang->attribnames[10];
 	}
 	if (theApp.m_settings.infotip_flags & (TIP_ATTRIB|TIP_SIZE))
-		string += '\n';
+		string += L'\n';
 	if (theApp.m_settings.infotip_flags & TIP_DATE) {
 		PrintDate(string, cur->source->times[cur->index]);
-		string += '\n';
+		string += L'\n';
 	}
 	if (theApp.m_settings.infotip_flags & TIP_ICON) {
 		SHFILEINFO fileinfo;
-		memset(&fileinfo, sizeof(SHFILEINFO), 0);
-		SHGetFileInfo(path+cur->source->names[cur->index], 0,
-			&fileinfo, sizeof(SHFILEINFO), SHGFI_DISPLAYNAME|SHGFI_ICON);
+		memset(&fileinfo, 0, sizeof(SHFILEINFO));
+		SHGetFileInfo(fullpath, 0, &fileinfo, sizeof(SHFILEINFO), SHGFI_ICON);
+		HICON oldicon = (HICON)m_infotipwnd.SendMessage(WM_GETICON, 0, 0);
 		m_infotipwnd.SetIcon(fileinfo.hIcon, 1);
 		m_infotipwnd.SetIconPos(TW_LEFT);
+		if (oldicon != NULL && oldicon != fileinfo.hIcon) DestroyIcon(oldicon);
 	}
 
+	m_infotipwnd.SetBgColor(Theme_Color(COLOR_INFOBK));
+	m_infotipwnd.SetTextColor(Theme_Color(COLOR_INFOTEXT));
+	m_infotipwnd.SetBorderColor(Theme_IsDark() ? RGB(0x60, 0x60, 0x60) : RGB(0, 0, 0));
 	m_infotipwnd.SetWindowText(string);
 	m_infotipwnd.AutoSize();
 	m_infotipwnd.EnableWindow(1);
@@ -418,13 +484,13 @@ void CFolderView::SetupNameTip(CDisplayFolder *cur)
 	if (cur == NULL) return;
 
 	CDC *pDC = GetDC();
-	pDC->SelectObject(&minifont);
-	pDC->SetBkMode(TRANSPARENT);
-	pDC->SetTextAlign(TA_LEFT | TA_TOP | TA_NOUPDATECP);
-	pDC->SelectPalette(&m_palette, 0);
+	CFont *oldfont = pDC->SelectObject(&minifont);
 
 	int tx, ty, failed = 0;
-	CSize size = pDC->GetTextExtent(cur->name, strlen(cur->name));
+	CSize size = pDC->GetTextExtent(cur->name, (int)wcslen(cur->name));
+	pDC->SelectObject(oldfont);
+	ReleaseDC(pDC);
+
 	int x = cur->x, y = cur->y, w = cur->w + 1, h = cur->h + 1;
 	if (size.cx > w - 2) tx = x + 2;
 	else if (cur->flags & 1) tx = x + 2, failed++;
@@ -434,32 +500,31 @@ void CFolderView::SetupNameTip(CDisplayFolder *cur)
 	else ty = y + (h - size.cy) / 2, failed++;
 	if (failed == 2) return;
 
-	if (!(cur->flags & 1) && h >= 36 && w >= 48)
-		ty -= 12;
+	if (!(cur->flags & 1) && h >= 3 * m_line + 4 && w >= Px(48))
+		ty -= m_line;
 
 	if (selected == cur) {
-		m_nametipwnd.SetBgColor(RGB(0,0,0));
-		m_nametipwnd.SetTextColor(RGB(255,255,255));
+		m_nametipwnd.SetBgColor(ThemeSelectedColor());
+		m_nametipwnd.SetTextColor(ThemeSelectedTextColor());
 	}
 	else if (cur->flags & 4) {
-		m_nametipwnd.SetBgColor(BoxColors[(cur->depth & 7) + 8]);
-		m_nametipwnd.SetTextColor(RGB(0,0,0));
+		m_nametipwnd.SetBgColor(ThemeBoxColor(BoxColors[(cur->depth & 7) + 8]));
+		m_nametipwnd.SetTextColor(ThemeBoxTextColor());
 	}
 	else {
-		m_nametipwnd.SetBgColor(BoxColors[cur->depth & 7]);
-		m_nametipwnd.SetTextColor(RGB(0,0,0));
+		m_nametipwnd.SetBgColor(ThemeBoxColor(BoxColors[cur->depth & 7]));
+		m_nametipwnd.SetTextColor(ThemeBoxTextColor());
 	}
 	m_nametipwnd.SetWindowText(cur->name);
 	m_nametipwnd.AutoSize();
 	m_nametipwnd.MoveWindow(this, tx-2, ty-1);
 	m_nametipwnd.PushOnScreen();
 
-	ReleaseDC(pDC);
 	m_nametipwnd.EnableWindow(1);
 	m_nametipwnd.RedrawWindow();
 }
 
-static void AddMenuEntry(HMENU menu, UINT cmd = 0, const char *string = NULL,
+static void AddMenuEntry(HMENU menu, UINT cmd = 0, const wchar_t *string = NULL,
 	BOOL checked = 0, BOOL disabled = 0, BOOL bold = 0)
 {
 	MENUITEMINFO mii;
@@ -474,8 +539,8 @@ static void AddMenuEntry(HMENU menu, UINT cmd = 0, const char *string = NULL,
 	mii.hSubMenu = NULL;
 	mii.hbmpChecked = NULL;
 	mii.hbmpUnchecked = NULL;
-	mii.dwTypeData = (char *)string;
-	if (string != NULL) mii.cch = strlen(string);
+	mii.dwTypeData = (wchar_t *)string;
+	if (string != NULL) mii.cch = (UINT)wcslen(string);
 	else mii.cch = 0;
 
 	::InsertMenuItem(menu, GetMenuItemCount(menu), TRUE, &mii);
@@ -487,26 +552,28 @@ void CFolderView::OnRButtonUp(UINT flags, CPoint point)
 	SelectFolder(cur);
 	ClientToScreen(&point);
 
-	bool showinfo = m_infotipwnd.IsWindowEnabled();
-	bool showname = m_nametipwnd.IsWindowEnabled();
+	bool showinfo = m_infotipwnd.IsWindowEnabled() != 0;
+	bool showname = m_nametipwnd.IsWindowEnabled() != 0;
 	m_infotipwnd.EnableWindow(0);
 	m_nametipwnd.EnableWindow(0);
 
 	CSpaceMonger *app = (CSpaceMonger *)AfxGetApp();
 	HMENU menu = ::CreatePopupMenu();
 	::AddMenuEntry(menu, ID_VIEW_ZOOM_IN, CurLang->zoomin, 0, cur == NULL, (cur != NULL) && (cur->flags & 1) != 0);
-	::AddMenuEntry(menu, ID_VIEW_ZOOM_OUT, CurLang->zoomout, 0, cur == NULL, 0);
-	::AddMenuEntry(menu, ID_VIEW_ZOOM_FULL, CurLang->zoomfull, 0, cur == NULL, 0);
+	::AddMenuEntry(menu, ID_VIEW_ZOOM_OUT, CurLang->zoomout, 0, zoomlevel == 0, 0);
+	::AddMenuEntry(menu, ID_VIEW_ZOOM_FULL, CurLang->zoomfull, 0, zoomlevel == 0, 0);
 	::AddMenuEntry(menu);
 	::AddMenuEntry(menu, ID_FILE_RUN, CurLang->run, 0, cur == NULL, (cur != NULL) && (cur->flags & 1) == 0);
+	::AddMenuEntry(menu, ID_FILE_EXPLORE, CurLang->showinexplorer, 0, cur == NULL, 0);
 	::AddMenuEntry(menu, ID_FILE_DELETE, CurLang->del, 0,
-		!app->m_settings.disable_delete && cur == NULL, 0);
+		app->m_settings.disable_delete || cur == NULL, 0);
 	::AddMenuEntry(menu);
 	::AddMenuEntry(menu, ID_FILE_OPEN, CurLang->opendrive, 0, 0, 0);
-	::AddMenuEntry(menu, ID_FILE_REFRESH, CurLang->rescandrive, 0, 0, 0);
-	::AddMenuEntry(menu, ID_VIEW_FREE, CurLang->showfreespace, showfreespace, 0, 0);
+	::AddMenuEntry(menu, ID_FILE_OPEN_FOLDER, CurLang->openfolder, 0, 0, 0);
+	::AddMenuEntry(menu, ID_FILE_REFRESH, CurLang->rescandrive, 0, rootfolder == NULL, 0);
+	::AddMenuEntry(menu, ID_VIEW_FREE, CurLang->showfreespace, showfreespace, rootfolder == NULL, 0);
 	::AddMenuEntry(menu);
-	::AddMenuEntry(menu, ID_FILE_PROPERTIES, CurLang->properties, 0, 0, 0);
+	::AddMenuEntry(menu, ID_FILE_PROPERTIES, CurLang->properties, 0, cur == NULL, 0);
 	::TrackPopupMenuEx(menu, TPM_LEFTALIGN|TPM_LEFTBUTTON|TPM_RIGHTBUTTON,
 		point.x, point.y, theApp.m_mainframe->m_hWnd, NULL);
 	::DestroyMenu(menu);
@@ -541,76 +608,74 @@ static CString GetSizeString(ui64 size, ui64 totalspace, BOOL percent)
 	if (totalspace == 0) totalspace = (ui64)(-1);
 
 	if (percent) {
-		size = (size * (ui64)1000) / totalspace;
+		size = (ui64)(((double)size * 1000.0) / (double)totalspace);
 		result.Format(CurLang->percent_format, (ui32)size / 10, (ui32)size % 10);
 	}
 	else {
-		ui32 displayfull, displayfractional;
-		const char *displaytype;
+		static const ui64 KB = 1024, MB = KB * 1024, GB = MB * 1024, TB = GB * 1024;
+		ui64 unit;
+		const wchar_t *displaytype;
 
-		if (size < (ui64)(1024)) {
-			displayfull = (ui32)size;
-			displayfractional = 0;
-			displaytype = CurLang->bytes;
-		}
-		else if (size < (ui64)(1024*1024)) {
-			displayfull = (ui32)(size / (ui64)(1024));
-			displayfractional = (ui32)(10 * (size % (ui64)(1024)) / (ui64)(1024));
-			displaytype = CurLang->kb;
-		}
-		else if (size < (ui64)(1024*1024*1024)) {
-			displayfull = (ui32)(size / (ui64)(1024*1024));
-			displayfractional = (ui32)(10 * (size % (ui64)(1024*1024)) / (ui64)(1024*1024));
-			displaytype = CurLang->mb;
-		}
-		else {
-			displayfull = (ui32)(size / (ui64)(1024*1024*1024));
-			displayfractional = (ui32)(10 * (size % (ui64)(1024*1024*1024)) / (ui64)(1024*1024*1024));
-			displaytype = CurLang->gb;
-		}
+		if (size < KB) unit = 1, displaytype = CurLang->bytes;
+		else if (size < MB) unit = KB, displaytype = CurLang->kb;
+		else if (size < GB) unit = MB, displaytype = CurLang->mb;
+		else if (size < TB) unit = GB, displaytype = CurLang->gb;
+		else unit = TB, displaytype = CurLang->tb;
+
+		ui32 displayfull = (ui32)(size / unit);
+		ui32 displayfractional = (ui32)(10 * (size % unit) / unit);
 		result.Format(CurLang->size_format, displayfull, displayfractional, displaytype);
 	}
 
 	return result;
 }
 
+// Percentages are of the whole disk, or of the folder when scanning a folder.
+ui64 CFolderView::GetPercentBase(void)
+{
+	CFolderTree *ft = (CFolderTree *)GetDocument();
+	if (ft == NULL) return 0;
+	if (ft->IsVolumeRoot() || ft->GetRoot() == NULL) return ft->totalspace;
+	return ft->GetRoot()->SizeTotal();
+}
+
 void CFolderView::UpdateTitleBar(void)
 {
 	CMainFrame *mainfrm = (CMainFrame *)GetTopLevelFrame();
 	CFolderTree *ft = (CFolderTree *)GetDocument();
-	CString title = "";
+	CString title = L"";
 	ui64 size;
 
+	if (mainfrm == NULL) return;
 	mainfrm->m_toolbar.UpdateButtonsForView(this);
 
-	if (mainfrm == NULL) return;
 	if (ft == NULL) {
-		mainfrm->SetWindowText(title);
+		mainfrm->SetWindowText(L"SpaceMonger");
 		return;
 	}
 
 	if (selected != NULL && selected->name != NULL) {
-		if (ft != NULL) title += ft->m_path;
+		title += ft->m_path;
 		BuildTitleReverse(selected->source, title);
 		title += selected->source->names[selected->index];
 		size = selected->source->sizes[selected->index];
-		title += "  -  " + GetSizeString(size, ft->totalspace, 1)
-			+ "  -  " + GetSizeString(size, ft->totalspace, 0) + "  -  ";
+		title += L"  -  " + GetSizeString(size, GetPercentBase(), 1)
+			+ L"  -  " + GetSizeString(size, GetPercentBase(), 0) + L"  -  ";
 	}
-	else if (rootfolder != NULL && ft != NULL) {
-		if (ft != NULL) title += ft->m_path;
+	else if (rootfolder != NULL) {
+		title += ft->m_path;
 		BuildTitleReverse(rootfolder, title);
-		if (rootfolder->parent == NULL) size = ft->totalspace; // Kludge
+		if (rootfolder->parent == NULL && ft->IsVolumeRoot()) size = ft->totalspace; // Kludge
 		else size = rootfolder->SizeTotal();
-		title += "  -  " + GetSizeString(size, ft->totalspace, 0)
-			+ " " + CurLang->total + "  -  " + GetSizeString(ft->freespace, ft->freespace, 0)
-			+ " " + CurLang->free + "  -  ";
+		title += L"  -  " + GetSizeString(size, ft->totalspace, 0)
+			+ L" " + CurLang->total + L"  -  " + GetSizeString(ft->freespace, ft->freespace, 0)
+			+ L" " + CurLang->free + L"  -  ";
 	}
 
-	title += "SpaceMonger";
+	title += L"SpaceMonger";
 
 	mainfrm->SetWindowText(title);
-}	
+}
 
 void CFolderView::BuildTitleReverse(CFolder *folder, CString &string)
 {
@@ -619,42 +684,85 @@ void CFolderView::BuildTitleReverse(CFolder *folder, CString &string)
 	if (folder->parent == NULL) return;
 
 	string += folder->parent->names[folder->parentindex];
-	string += "\\";
+	string += L"\\";
+}
+
+BOOL CFolderView::OnEraseBkgnd(CDC *pDC)
+{
+	return 1;		// OnPaint draws everything
+}
+
+void CFolderView::OnPaint()
+{
+	// Draw into an off-screen bitmap first, so the view doesn't flicker.
+	CPaintDC dc(this);
+	CRect rect;
+	GetClientRect(&rect);
+	if (rect.IsRectEmpty()) return;
+
+	CDC memdc;
+	memdc.CreateCompatibleDC(&dc);
+	CBitmap bitmap;
+	bitmap.CreateCompatibleBitmap(&dc, rect.Width(), rect.Height());
+	CBitmap *oldbitmap = memdc.SelectObject(&bitmap);
+
+	OnDraw(&memdc);
+
+	dc.BitBlt(0, 0, rect.Width(), rect.Height(), &memdc, 0, 0, SRCCOPY);
+	memdc.SelectObject(oldbitmap);
+}
+
+void CFolderView::Redraw(void)
+{
+	Invalidate(FALSE);
+	UpdateWindow();
 }
 
 void CFolderView::OnDraw(CDC *pDC)
 {
-	pDC->SelectObject(&minifont);
+	CFont *oldfont = pDC->SelectObject(&minifont);
 	pDC->SetBkMode(TRANSPARENT);
 	pDC->SetTextAlign(TA_LEFT | TA_TOP | TA_NOUPDATECP);
-	pDC->SelectPalette(&m_palette, 0);
-	pDC->RealizePalette();
 
 	CDisplayFolder *cur = displayfolders;
 
-	DrawBox(pDC->m_hDC, ColorFlat, 0, 0, m_width, m_height);
-	if (cur == NULL)
-		FillBox(pDC->m_hDC, ColorFlat, 1, 1, m_width-2, m_height-2);
+	FillBox(pDC->m_hDC, ColorFlat, 0, 0, m_width, m_height);
+	DrawBox(pDC->m_hDC, ColorDark, 0, 0, m_width, m_height);
 
 	while (cur != NULL) {
 		MinimalDrawDisplayFolder(pDC, cur, selected == cur);
 		cur = cur->next;
 	}
+	pDC->SelectObject(oldfont);
 }
 
 void CFolderView::DrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL sel)
 {
-	pDC->SelectObject(&minifont);
+	CFont *oldfont = pDC->SelectObject(&minifont);
 	pDC->SetBkMode(TRANSPARENT);
 	pDC->SetTextAlign(TA_LEFT | TA_TOP | TA_NOUPDATECP);
-	pDC->SelectPalette(&m_palette, 0);
 
 	MinimalDrawDisplayFolder(pDC, cur, sel);
+	pDC->SelectObject(oldfont);
+}
+
+// Fills a rectangular ring "thickness" pixels wide.
+static void FillFrame(HDC dc, HBRUSH brush, int x, int y, int w, int h, int thickness)
+{
+	if (thickness * 2 >= w || thickness * 2 >= h) {
+		FillBox(dc, brush, x, y, w, h);
+		return;
+	}
+	FillBox(dc, brush, x, y, w, thickness);
+	FillBox(dc, brush, x, y + h - thickness, w, thickness);
+	FillBox(dc, brush, x, y + thickness, thickness, h - thickness * 2);
+	FillBox(dc, brush, x + w - thickness, y + thickness, thickness, h - thickness * 2);
 }
 
 void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL sel)
 {
 	int x, y, w, h;
+	int B = m_border;
 
 	x = cur->x, y = cur->y, w = cur->w + 1, h = cur->h + 1;
 
@@ -668,7 +776,7 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 			: theApp.m_settings.file_color;
 
 		if (sel && !(cur->flags & 2))
-			color = bright = dark = RGB(0,0,0);
+			color = bright = dark = ThemeSelectedColor();
 		else if (cur->depth != -1) {
 			if (colortype == 0) {
 				color = BoxColors[cur->depth & 7];
@@ -676,9 +784,9 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 				dark = BoxColors[(cur->depth & 7) + 16];
 			}
 			else if (colortype == 1) {
-				color = GetSysColor(COLOR_3DFACE);
-				bright = GetSysColor(COLOR_3DHILIGHT);
-				dark = GetSysColor(COLOR_3DSHADOW);
+				color = Theme_Color(COLOR_3DFACE);
+				bright = Theme_Color(COLOR_3DHILIGHT);
+				dark = Theme_Color(COLOR_3DSHADOW);
 			}
 			else {
 				color = FixedColors[colortype-2];
@@ -689,8 +797,13 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 				if (cur->flags & 4) dark = color, color = bright, bright = RGB(255,255,255);
 				else bright = color, color = dark;
 			}
+			if (colortype != 1) {
+				color = ThemeBoxColor(color);
+				bright = ThemeBoxColor(bright);
+				dark = ThemeBoxColor(dark);
+			}
 		}
-		else color = bright = dark = GetSysColor(COLOR_3DFACE);
+		else color = bright = dark = Theme_Color(COLOR_3DFACE);
 
 		brush.CreateSolidBrush(color);
 		bbrush.CreateSolidBrush(bright);
@@ -698,8 +811,10 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 
 		DrawDualBox(pDC->m_hDC, bbrush, dbrush, x + 1, y + 1, w - 2, h - 2);
 		if (cur->flags & 1) {
-			DrawBox(pDC->m_hDC, brush, x + 2, y + 2, w - 4, h - 4);
-			FillBox(pDC->m_hDC, brush, x + 3, y + 3, w - 6, 9);
+			// Folders: a border, plus a header band for the name.  The
+			// inside is left alone, since the folder's contents go there.
+			FillFrame(pDC->m_hDC, brush, x + 2, y + 2, w - 4, h - 4, B - 2);
+			FillBox(pDC->m_hDC, brush, x + B, y + B, w - B * 2, m_line);
 		}
 		else FillBox(pDC->m_hDC, brush, x + 2, y + 2, w - 4, h - 4);
 	}
@@ -709,40 +824,42 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 		rgn.CreateRectRgn(x, y, x + w, y + h);
 		pDC->SelectClipRgn(&rgn);
 
-		int len = strlen(cur->name);
+		int len = (int)wcslen(cur->name);
 		CSize size;
 		int tx, ty;
 
 		size = pDC->GetTextExtent(cur->name, len);
 		if (size.cx > w - 2 || (cur->flags & 1)) tx = x + 2;
 		else tx = x + (w - size.cx) / 2;
-		if (size.cy > h - 2 || (cur->flags & 1)) ty = y + 1;
+		if (size.cy > h - 2 || (cur->flags & 1)) ty = y + B - 1;
 		else ty = y + (h - size.cy) / 2;
+
+		pDC->SetTextColor((sel && !(cur->flags & 2)) ? ThemeSelectedTextColor() : ThemeBoxTextColor());
+		if (cur->flags & 2) pDC->SetTextColor(Theme_Color(COLOR_WINDOWTEXT));
 
 		if (cur->flags & 2) {
 			// There's only one free-space block, so we can afford to
 			// be a little less efficient with it.
 			CFolderTree *ft = (CFolderTree *)GetDocument();
-			char buffer[256];
 			CString string;
 			ui64 ts = ft->totalspace;
 			if (ts <= 1) ts = 1;
 			si32 freepercent = (si32)(ft->freespace * (ui64)1000 / ts);
+			int top = y + h / 2 - m_line * 2;
 			string.Format(CurLang->freespace_format, freepercent / 10, freepercent % 10);
 			size = pDC->GetTextExtent(string);
 			if (size.cx > w-2) tx = x + 2;
 			else tx = x + (w - size.cx) / 2;
-			pDC->TextOut(tx, ty-18, string);
-			strcpy(buffer, GetSizeString(ft->freespace, ft->totalspace, 0)+" "+CurLang->free);
-			pDC->TextOut(tx, ty-6, buffer, strlen(buffer));
-			sprintf(buffer, CString(CurLang->files_total)+"  %u", ft->numfiles);
-			pDC->TextOut(tx, ty+6, buffer, strlen(buffer));
-			sprintf(buffer, CString(CurLang->folders_total)+"  %u", ft->numfolders);
-			pDC->TextOut(tx, ty+15, buffer, strlen(buffer));
+			pDC->TextOut(tx, top, string);
+			pDC->TextOut(tx, top + m_line, GetSizeString(ft->freespace, ft->totalspace, 0)
+				+ L" " + CurLang->free);
+			pDC->TextOut(tx, top + m_line * 2, CString(CurLang->files_total) + L"  "
+				+ FormatCount(ft->numfiles));
+			pDC->TextOut(tx, top + m_line * 3, CString(CurLang->folders_total) + L"  "
+				+ FormatCount(ft->numfolders));
 		}
 		else {
-			if (sel) pDC->SetTextColor(RGB(0xFF,0xFF,0xFF));
-			if (!(cur->flags & 1) && h >= 36 && w >= 48) {
+			if (!(cur->flags & 1) && h >= 3 * m_line + 4 && w >= Px(48)) {
 				// Enough room (probably) for the date and file size
 				CString string;
 				CSize size;
@@ -756,12 +873,11 @@ void CFolderView::MinimalDrawDisplayFolder(CDC *pDC, CDisplayFolder *cur, BOOL s
 				PrintDate(string, cur->source->times[cur->index]);
 				size = pDC->GetTextExtent(string);
 				if (size.cx > w-2)
-					pDC->TextOut(x+2, ty+11, string);
-				else pDC->TextOut(x+(w-size.cx)/2, ty+11, string);
-				ty -= 12;
+					pDC->TextOut(x+2, ty+1+m_line, string);
+				else pDC->TextOut(x+(w-size.cx)/2, ty+1+m_line, string);
+				ty -= m_line;
 			}
 			pDC->TextOut(tx, ty, cur->name, len);
-			if (sel) pDC->SetTextColor(RGB(0,0,0));
 		}
 		pDC->SelectClipRgn(NULL);
 	}
@@ -778,9 +894,7 @@ void CFolderView::SetDocument(CFreeDoc *doc)
 
 	UpdateTitleBar();
 	OnSize(0, m_width, m_height);
-	CDC *dc = GetDC();
-	OnDraw(dc);
-	ReleaseDC(dc);
+	Redraw();
 }
 
 void CFolderView::OnActivate(UINT nState, CWnd *pWndOther, BOOL bMinimized)
@@ -791,10 +905,6 @@ void CFolderView::OnActivate(UINT nState, CWnd *pWndOther, BOOL bMinimized)
 
 void CFolderView::SetPalette(void)
 {
-	CDC *dc = GetDC();
-	dc->SelectPalette(&m_palette, 0);
-	dc->RealizePalette();
-	ReleaseDC(dc);
 }
 
 void CFolderView::OnUpdate(CFreeDoc *doc)
@@ -802,10 +912,7 @@ void CFolderView::OnUpdate(CFreeDoc *doc)
 	UpdateTitleBar();
 
 	OnSize(0, m_width, m_height);
-
-	CDC *dc = GetDC();
-	OnDraw(dc);
-	ReleaseDC(dc);
+	Redraw();
 
 	m_infotipwnd.SetShowDelay(theApp.m_settings.infotip_delay);
 	m_nametipwnd.SetShowDelay(theApp.m_settings.nametip_delay);
@@ -819,6 +926,7 @@ void CFolderView::OnSize(UINT nType, int cx, int cy)
 	m_height = cy = rect.bottom - rect.top;
 
 	ClearDisplayFolders();
+	lastcur = NULL;
 
 	if (rootfolder == NULL) {
 		if (GetDocument() == NULL) return;
@@ -828,13 +936,14 @@ void CFolderView::OnSize(UINT nType, int cx, int cy)
 	}
 
 	BuildFolderLayout(0, 0, cx - 1, cy - 1, rootfolder, zoomlevel);
+	if (nType != 0) Invalidate(FALSE);
 }
 
 CDisplayFolder *CFolderView::AddDisplayFolder(CFolder *source, ui32 index,
 	si32 depth, si16 x, si16 y, si16 w, si16 h, ui32 flags)
 {
 	CDisplayFolder *newfolder = new CDisplayFolder;
-	char c;
+	wchar_t c;
 
 	if (source != NULL && index != (ui32)-1) {
 		newfolder->name = source->names[index];
@@ -842,7 +951,7 @@ CDisplayFolder *CFolderView::AddDisplayFolder(CFolder *source, ui32 index,
 	}
 	else newfolder->name = NULL, c = 0;
 
-	if (c == '*' || c == '<' || c == '>' || c == '?' || c == '|')
+	if (c == L'<')
 		newfolder->depth = -1, flags |= 2;
 	else newfolder->depth = depth;
 
@@ -892,19 +1001,17 @@ void CFolderView::BuildFolderLayout(int x, int y, int w, int h, CFolder *folder,
 		{ 16, 12, },
 		{ 8, 6, },
 	};
-	hmin = minsizes[theApp.m_settings.density + 3][0];
-	vmin = minsizes[theApp.m_settings.density + 3][1];
+	hmin = Px(minsizes[theApp.m_settings.density + 3][0]);
+	vmin = Px(minsizes[theApp.m_settings.density + 3][1]);
 
 	SizeFolders(x, y, w, h, folder, indices, (int)folder->cur, depth);
 
-	delete indices;
+	delete[] indices;
 }
 
 void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *index, int numindices, int depth)
 {
 	if (folder == NULL) return;
-
-	ui64 totalspace = folder->SizeTotal();
 
 	int *list1 = new int[numindices];
 	int *list2 = new int[numindices];
@@ -913,6 +1020,7 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 	int x1, y1, w1, h1;
 	int x2, y2, w2, h2;
 	int split;
+	int B = m_border, T = m_line;
 
 	// Split the lists evenly.  We assume the sizes are sorted
 	// in descending order.  Overall, this is a greedy algorithm,
@@ -923,7 +1031,7 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 
 	for (largest = 0; largest < numindices; largest++) {
 		bignum = (si64)folder->sizes[index[largest]];
-		if (folder->names[index[largest]][0] == '<' && !showfreespace)
+		if (folder->names[index[largest]][0] == L'<' && !showfreespace)
 			bignum = 0;
 		if (bignum != 0) {
 			if (list1sum <= list2sum) {
@@ -939,8 +1047,8 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 
 	// Don't bother if the files have no space
 	if (list1sum + list2sum <= 0) {
-		delete list1;
-		delete list2;
+		delete[] list1;
+		delete[] list2;
 		return;
 	}
 
@@ -953,12 +1061,12 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 		hbias = -theApp.m_settings.bias + 8, wbias = 8;
 	else wbias = 8, hbias = 8;
 	if (((w * wbias) / 8) > ((h * hbias) / 8)) {
-		split = (int)(((si64)w * list1sum) / (list1sum + list2sum));
+		split = (int)(((double)w * (double)list1sum) / (double)(list1sum + list2sum));
 		x1 = x, y1 = y, w1 = split, h1 = h;
 		x2 = x + split, y2 = y, w2 = w - split, h2 = h;
 	}
 	else {
-		split = (int)(((si64)h * list1sum) / (list1sum + list2sum));
+		split = (int)(((double)h * (double)list1sum) / (double)(list1sum + list2sum));
 		x1 = x, y1 = y, w1 = w, h1 = split;
 		x2 = x, y2 = y + split, w2 = w, h2 = h - split;
 	}
@@ -972,12 +1080,8 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 				depth, x1, y1, w1, h1,
 				(folder->children[list1[0]] != NULL));
 			if (folder->children[list1[0]] != NULL) {
-				if (w1 > hmin && h1 > vmin) {
-					BuildFolderLayout(x1 + 3, y1 + 12, w1 - 6, h1 - 15,
-						folder->children[list1[0]], depth+1);
-				}
-				else AddDisplayFolder(folder, (ui32)-1, depth + 1,
-					x2 + 3, y2 + 12, w2 - 6, h2 - 15, 0);
+				BuildFolderLayout(x1 + B, y1 + B + T, w1 - B * 2, h1 - B * 2 - T,
+					folder->children[list1[0]], depth+1);
 			}
 		}
 		else AddDisplayFolder(folder, (ui32)-1, depth, x1, y1, w1, h1, 0);
@@ -990,19 +1094,15 @@ void CFolderView::SizeFolders(int x, int y, int w, int h, CFolder *folder, int *
 				depth, x2, y2, w2, h2,
 				(folder->children[list2[0]] != NULL));
 			if (folder->children[list2[0]] != NULL) {
-				if (w2 > hmin && h2 > vmin) {
-					BuildFolderLayout(x2 + 3, y2 + 12, w2 - 6, h2 - 15,
-						folder->children[list2[0]], depth+1);
-				}
-				else AddDisplayFolder(folder, (ui32)-1, depth + 1,
-					x2 + 3, y2 + 12, w2 - 6, h2 - 15, 0);
+				BuildFolderLayout(x2 + B, y2 + B + T, w2 - B * 2, h2 - B * 2 - T,
+					folder->children[list2[0]], depth+1);
 			}
 		}
 		else AddDisplayFolder(folder, (ui32)-1, depth, x2, y2, w2, h2, 0);
 	}
 
-	delete list1;
-	delete list2;
+	delete[] list1;
+	delete[] list2;
 }
 
 void CFolderView::ZoomIn(CDisplayFolder *folder)
@@ -1010,7 +1110,8 @@ void CFolderView::ZoomIn(CDisplayFolder *folder)
 	CFolderTree *doc = (CFolderTree *)GetDocument();
 	CFolder *oldroot = rootfolder;
 
-	if (folder != NULL && folder->source->children[folder->index] != NULL)
+	if (folder == NULL) return;
+	if (folder->source->children[folder->index] != NULL)
 		rootfolder = folder->source->children[folder->index];
 
 	if (rootfolder == oldroot) return;
@@ -1109,18 +1210,23 @@ void CFolderView::AnimateBox(const CRect &start, const CRect &end)
 	ui32 step;
 	CRect rect = start;
 	CDC *dc = GetDC();
+	CPen pen(PS_SOLID, Px(1), RGB(0, 0, 0));
+	CPen *oldpen = dc->SelectObject(&pen);
 	dc->SetROP2(R2_NOT);
 	for (step = 0; step < 8; step++) {
 		ComputeNewRect(rect, start, end, 8, step);
 		MinimalRect(dc, rect);
+		GdiFlush();
 		Sleep(25);
 	}
 	for (step = 0; step < 8; step++) {
 		ComputeNewRect(rect, start, end, 8, step);
 		MinimalRect(dc, rect);
+		GdiFlush();
 		Sleep(25);
 	}
 	dc->SetROP2(R2_COPYPEN);
+	dc->SelectObject(oldpen);
 	ReleaseDC(dc);
 }
 
@@ -1128,4 +1234,3 @@ void CFolderView::OnIgnoreUpdate(CCmdUI *ui)
 {
 	GeneralIgnoreUpdate(ui);
 }
-

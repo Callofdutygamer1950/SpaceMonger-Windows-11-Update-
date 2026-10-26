@@ -6,45 +6,81 @@
 CDriveDialog::CDriveDialog(CWnd* pParent)
 	: CDialog(IDD_OPEN_DIALOG, pParent)
 {
+	m_imagelist = NULL;
 }
 
 BEGIN_MESSAGE_MAP(CDriveDialog, CDialog)
 	//{{AFX_MSG_MAP(CDriveDialog)
 	ON_NOTIFY(NM_DBLCLK, IDC_DRIVE_LIST, OnDriveDblClk)
+	ON_BN_CLICKED(IDC_BROWSE, OnBrowse)
+	ON_WM_DESTROY()
+	ON_WM_CTLCOLOR()
+	ON_WM_ERASEBKGND()
 	//}}AFX_MSG_MAP
 END_MESSAGE_MAP()
 
-void CDriveDialog::OnDriveDblClk(NMHDR *pNotifyStruct, LRESULT *result)
+BOOL CDriveDialog::ChooseSelected(void)
 {
 	CListCtrl *lc = (CListCtrl *)GetDlgItem(IDC_DRIVE_LIST);
-	if (lc == NULL) return;
-	if (lc->GetSelectedCount() != 1) return;
+	if (lc == NULL || lc->GetSelectedCount() != 1) return 0;
 
-	int i, max = lc->GetItemCount();
-	for (i = 0; i < max; i++) {
-		if (lc->GetItemState(i, LVIS_SELECTED)) {
-			EndDialog(lc->GetItemData(i));
-		}
-	}
+	int item = lc->GetNextItem(-1, LVNI_SELECTED);
+	if (item < 0) return 0;
+	m_path.Format(L"%c:\\", (wchar_t)(L'A' + lc->GetItemData(item)));
+	EndDialog(IDOK);
+	return 1;
+}
+
+void CDriveDialog::OnDriveDblClk(NMHDR *pNotifyStruct, LRESULT *result)
+{
+	ChooseSelected();
+	*result = 0;
 }
 
 void CDriveDialog::OnOK()
 {
-	CListCtrl *lc = (CListCtrl *)GetDlgItem(IDC_DRIVE_LIST);
-	if (lc == NULL) EndDialog(-1);
-	if (lc->GetSelectedCount() != 1) return;
-
-	int i, max = lc->GetItemCount();
-	for (i = 0; i < max; i++) {
-		if (lc->GetItemState(i, LVIS_SELECTED)) {
-			EndDialog(lc->GetItemData(i));
-		}
-	}
+	ChooseSelected();
 }
 
 void CDriveDialog::OnCancel()
 {
-	EndDialog(-1);
+	m_path.Empty();
+	EndDialog(IDCANCEL);
+}
+
+void CDriveDialog::OnBrowse()
+{
+	CString path;
+	if (PickFolder(m_hWnd, path)) {
+		m_path = path;
+		EndDialog(IDOK);
+	}
+}
+
+void CDriveDialog::OnDestroy()
+{
+	// The list control doesn't own the image list (no LVS_SHAREIMAGELISTS
+	// semantics for LVSIL_NORMAL), so we free it ourselves.
+	CListCtrl *lc = (CListCtrl *)GetDlgItem(IDC_DRIVE_LIST);
+	if (lc != NULL) ListView_SetImageList(lc->m_hWnd, NULL, LVSIL_NORMAL);
+	if (m_imagelist != NULL) ImageList_Destroy(m_imagelist);
+	m_imagelist = NULL;
+	CDialog::OnDestroy();
+}
+
+HBRUSH CDriveDialog::OnCtlColor(CDC *pDC, CWnd *pWnd, UINT nCtlColor)
+{
+	HBRUSH brush = Theme_OnCtlColor(pDC->m_hDC, pWnd->m_hWnd, nCtlColor);
+	return brush != NULL ? brush : CDialog::OnCtlColor(pDC, pWnd, nCtlColor);
+}
+
+BOOL CDriveDialog::OnEraseBkgnd(CDC *pDC)
+{
+	if (!Theme_IsDark()) return CDialog::OnEraseBkgnd(pDC);
+	CRect rect;
+	GetClientRect(&rect);
+	pDC->FillRect(&rect, CBrush::FromHandle(Theme_Brush(COLOR_WINDOW)));
+	return 1;
 }
 
 BOOL CDriveDialog::OnInitDialog()
@@ -53,84 +89,51 @@ BOOL CDriveDialog::OnInitDialog()
 
 	CDialog::OnInitDialog();
 
-	CDriveInfo driveinfo[26];
-	HIMAGELIST imagelist;
-	int i, index;
-	LV_ITEM item;
-
-	imagelist = ImageList_Create(32, 32, TRUE, 0, 26);
-
-	CListCtrl *lc = (CListCtrl *)GetDlgItem(IDC_DRIVE_LIST);
-	::SendMessage(lc->m_hWnd, LVM_SETIMAGELIST, (WPARAM)LVSIL_NORMAL, (LPARAM)(HIMAGELIST)imagelist);
-
 	SetWindowText(CurLang->selectdrive);
 	SetDlgItemText(IDOK, CurLang->ok);
 	SetDlgItemText(IDCANCEL, CurLang->cancel);
+	SetDlgItemText(IDC_BROWSE, CurLang->browsefolder);
 
-	lc->InsertColumn(0, "Name");
-	if (lc != NULL) {
-		lc->SetItemCount(26);
-		index = 0;
-		for (i = 'A'; i <= 'Z'; i++) {
-			driveinfo[i-'A'].LoadDriveInfo(i);
-			if (driveinfo[i-'A'].avail) {
-				ImageList_AddIcon(imagelist, driveinfo[i-'A'].icon);
-				item.mask = LVIF_STATE|LVIF_TEXT|LVIF_IMAGE|LVIF_PARAM;
-				item.iItem = index;
-				item.iSubItem = 0;
-				item.state = 0;
-				item.stateMask = LVIS_SELECTED;
-				item.pszText = driveinfo[i-'A'].longname;
-				item.cchTextMax = strlen(driveinfo[i-'A'].longname);
-				item.iImage = index;
-				item.lParam = i - 'A';
-				::SendMessage(lc->m_hWnd, LVM_INSERTITEM, (WPARAM)0, (LPARAM)(&item));
-				index++;
-			}
-			driveinfo[i-'A'].Free();
-		}
-	}
-	
-	return TRUE;
-}
+	CListCtrl *lc = (CListCtrl *)GetDlgItem(IDC_DRIVE_LIST);
+	if (lc == NULL) return TRUE;
 
-//////////////////////////////////////////////////////////////////////////////
+	int iconsize = GetSystemMetricsForDpi(SM_CXICON, Dpi_ForWindow(m_hWnd));
+	m_imagelist = ImageList_Create(iconsize, iconsize, ILC_COLOR32|ILC_MASK, 0, 26);
+	ListView_SetImageList(lc->m_hWnd, m_imagelist, LVSIL_NORMAL);
 
-void CDriveInfo::Free(void)
-{
-	if (longname != NULL) delete[] longname;
-}
+	lc->InsertColumn(0, L"Name");
+	DWORD drives = GetLogicalDrives();
+	int index = 0;
+	for (int i = 0; i < 26; i++) {
+		if (!(drives & (1 << i))) continue;
 
-void CDriveInfo::LoadDriveInfo(char let)
-{
-	char name[8];
-	UINT type;
+		wchar_t name[4] = { (wchar_t)(L'A' + i), L':', L'\\', L'\0' };
+		UINT type = GetDriveType(name);
+		if (type == DRIVE_UNKNOWN || type == DRIVE_NO_ROOT_DIR) continue;
 
-	if (let >= 'a' && let <= 'z') let -= 32;
-	name[0] = let;
-	name[1] = ':';
-	name[2] = '\\';
-	name[3] = '\0';
-
-	type = GetDriveType(name);
-
-	if (type != 0 && type != 1) {
 		SHFILEINFO fileinfo;
-		memset(&fileinfo, sizeof(SHFILEINFO), 0);
+		memset(&fileinfo, 0, sizeof(SHFILEINFO));
+		SHGetFileInfo(name, 0, &fileinfo, sizeof(SHFILEINFO), SHGFI_DISPLAYNAME|SHGFI_ICON);
 
-		SHGetFileInfo(name, 0, &fileinfo, sizeof(SHFILEINFO),
-			SHGFI_DISPLAYNAME|SHGFI_ICON);
+		int image = -1;
+		if (fileinfo.hIcon != NULL) {
+			image = ImageList_AddIcon(m_imagelist, fileinfo.hIcon);
+			DestroyIcon(fileinfo.hIcon);
+		}
 
-		avail = 1;
-		letter = let;
-		icon = fileinfo.hIcon;
-		longname = new char[strlen(fileinfo.szDisplayName)+1];
-		strcpy(longname, fileinfo.szDisplayName);
+		LVITEM item;
+		memset(&item, 0, sizeof(item));
+		item.mask = LVIF_TEXT|LVIF_IMAGE|LVIF_PARAM;
+		item.iItem = index++;
+		item.pszText = fileinfo.szDisplayName[0] ? fileinfo.szDisplayName : name;
+		item.iImage = image;
+		item.lParam = i;
+		lc->InsertItem(&item);
 	}
-	else {
-		avail = 0;
-		letter = let;
-		icon = NULL;
-		longname = NULL;
-	}
+	if (lc->GetItemCount() > 0)
+		lc->SetItemState(0, LVIS_SELECTED|LVIS_FOCUSED, LVIS_SELECTED|LVIS_FOCUSED);
+
+	Theme_ApplyToWindow(m_hWnd);
+	lc->SetFocus();
+	return FALSE;
 }

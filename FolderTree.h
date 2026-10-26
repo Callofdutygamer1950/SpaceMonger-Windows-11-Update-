@@ -5,42 +5,64 @@
 class CFolderTree;
 class CFolderDialog;
 struct CFolder;
+struct CScanState;
 
 struct CFolder {
 public:
 	CFolder();
 	~CFolder();
 
-	void AddFile(CFolderTree *tree, const char *name, ui32 namelen, ui64 size, ui64 actual_size, ui64 time);
-	void AddFolder(CFolderTree *tree, const char *name, ui32 namelen, CFolder *folder, ui64 time);
+	void AddFile(CFolderTree *tree, const wchar_t *name, ui32 namelen, ui64 size, ui64 actual_size,
+		ui64 time, ui64 fileid = 0);
+	void AddFolder(CFolderTree *tree, const wchar_t *name, ui32 namelen, CFolder *folder, ui64 time);
 	void Finalize(void);
 	void DelFile(unsigned int index);
 	void RenameFile(unsigned int index, const CString &name);
 	unsigned int FindFile(const CString &name);
-	BOOL LoadFolderInitial(CFolderTree *tree, const char *name, ui64 clustersize, CFolderDialog *dialog);
 	inline ui64 SizeFiles() { return(size_self); }
 	inline ui64 SizeSub() { return(size_children); }
 	inline ui64 SizeTotal() { return(size_self + size_children); }
 
+	void LoadFolder(CScanState *state, const CString &path);
+	void CollectFileIds(std::vector<ui64> &ids);
+	void RemoveDuplicateLinks(const std::vector<ui64> &dups, std::unordered_set<ui64> &seen);
+	void ComputeSizes(void);
+
 private:
 	void MoreEntries(void);
-	void EightBitCountingSort(ui64 *dsize, ui64 *ssize, ui32 count, ui32 bitpos,
-		char **dnames, char **snames, CFolder **dkids, CFolder **skids,
-		ui64 *dasize, ui64 *sasize, ui64 *dtimes, ui64 *stimes);
-	BOOL LoadFolder(CFolderTree *tree, char *name, ui32 namelen, ui64 clustersize, BOOL aligned, CFolderDialog *dialog);
 
 public:
 	CFolder *parent;
 	unsigned int parentindex;
 
-	char **names;
+	wchar_t **names;
 	CFolder **children;
-	ui64 *sizes;
-	ui64 *actualsizes;
+	ui64 *sizes;			// Space used on disk
+	ui64 *actualsizes;		// Logical file size
 	ui64 *times;
+	ui64 *fileids;			// NTFS file ID (for counting hard links once), or 0
 	ui64 size_self, size_children;
 
 	unsigned int cur, max;
+};
+
+// Everything the background scanning threads share.
+struct CScanState {
+	CScanState();
+
+	ui64 clustersize;
+	BOOL skipcloudonly;		// Leave out files that are only stored in the cloud
+	BOOL hardlinks;			// Volume supports hard links, so count each file once
+
+	std::atomic<ui64> numfiles, numfolders, filespace;
+	std::atomic<bool> cancelled, done;
+
+	std::mutex pathlock;	// Protects curpath
+	CString curpath;
+	std::atomic<ui64> lastpathtick;
+
+	void SetPath(const CString &path);
+	CString GetPath(void);
 };
 
 class CFolderTree : public CFreeDoc {
@@ -57,6 +79,8 @@ public:
 	CFolder *Down(unsigned int index);
 	CFolder *Up(void);
 
+	BOOL IsVolumeRoot(void) const;
+
 protected:
 	CFolder *root, *cur;
 
@@ -65,6 +89,7 @@ public:
 	ui64 freespace, usedspace, totalspace, clustersize;
 	ui64 numfiles, numfolders;
 	ui64 filespace;
+	BOOL hardlinks;
 };
 
 class CFolderDialog : public CDialog {
@@ -73,50 +98,33 @@ public:
 	DECLARE_DYNCREATE(CFolderDialog)
 	virtual ~CFolderDialog();
 
-	virtual void Reset(void);
-	virtual void UpdateDisplay(CFolderTree *tree, CFolder *folder);
-	virtual void ForcedUpdate(CFolderTree *tree);
-
-	void IncFiles(void);
-	void IncFolders(void);
-	void SetPath(CFolderTree *tree, const CString &string, CFolder *folder);
+	virtual void Reset(BOOL wholedrive);
+	virtual void UpdateDisplay(CFolderTree *tree, CScanState *state);
+	virtual void ForcedUpdate(CFolderTree *tree, CScanState *state);
 
 	virtual void OnCancel(void);
 
 protected:
+	void DrawAnimation(CDC *dc);
+
 	//{{AFX_MSG(CFolderDialog)
+	afx_msg HBRUSH OnCtlColor(CDC *pDC, CWnd *pWnd, UINT nCtlColor);
+	afx_msg BOOL OnEraseBkgnd(CDC *pDC);
+	afx_msg void OnPaint();
 	//}}AFX_MSG
 	DECLARE_MESSAGE_MAP()
 
 public:
-	ui32 numfiles, numfolders;
-	CString path;
-
-	BOOL cancelled;
+	CScanState *state;
 
 protected:
-	BOOL chg_numfiles, chg_numfolders, chg_path;
-	DWORD last_tick, last_redraw;
+	BOOL wholedrive;
+	ULONGLONG last_tick;
 	ui32 cur_frame;
 };
 
-inline void CFolderDialog::IncFiles(void)
-{
-	numfiles++;
-	chg_numfiles = 1;
-}
-
-inline void CFolderDialog::IncFolders(void)
-{
-	numfolders++;
-	chg_numfolders = 1;
-}
-
-inline void CFolderDialog::SetPath(CFolderTree *tree, const CString &string, CFolder *folder)
-{
-	path = string;
-	chg_path = 1;
-	UpdateDisplay(tree, folder);
-}
+// Prefixes a path with \\?\ so that Windows accepts paths longer than 260
+// characters, whether or not long paths are enabled system-wide.
+CString MakeLongPath(const CString &path);
 
 #endif

@@ -9,17 +9,20 @@
 #include <afxext.h>         // MFC extensions
 #include <afxmt.h>          // MFC multithreading extensions
 #ifndef _AFX_NO_AFXCMN_SUPPORT
-#include <afxcmn.h>			// MFC support for Windows 95 Common Controls
+#include <afxcmn.h>			// MFC support for Windows Common Controls
 #endif // _AFX_NO_AFXCMN_SUPPORT
 
-#include <winnetwk.h>		// Windows networking subsystem
-#include <winsock.h>		// Windows sockets
-#include <nspapi.h>			// Namespace API
 #include <shellapi.h>		// Shell (Explorer) API
 #include <shlobj.h>			// Shell object definitions
+#include <shobjidl.h>		// IFileOperation, IFileOpenDialog
+#include <shlwapi.h>		// Path helpers
+#include <dwmapi.h>			// Dark title bars
+#include <uxtheme.h>		// Dark control themes
+
+#include <atomic>
+#include <mutex>
+#include <vector>
+#include <unordered_set>
 
 #include "xapp.h"			// Extended MFC utils
 #include "e.h"				// Enhanced portable types
-
-#define bool char
-

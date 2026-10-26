@@ -57,7 +57,7 @@ void CFreeDoc::SetPathName(const CString &string)
 
 UINT CFreeDoc::GetViewCount(void) const
 {
-	return(m_viewList.GetCount());
+	return((UINT)m_viewList.GetCount());
 }
 
 void CFreeDoc::AddView(CFreeView *view)

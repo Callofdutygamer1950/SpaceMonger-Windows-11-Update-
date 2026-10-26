@@ -3,56 +3,78 @@
 #include "SpaceMonger.h"
 #include "lang.h"
 
-static const char *densitynames[] = {
-	"Petit Peu de Fichiers", "Peu de Fichiers", "Normal", "Beaucoup de Fichiers",
-	"Très Beaucoup de Fichiers", "Trop de Fichiers",
+static const wchar_t *densitynames[] = {
+	L"Petit Peu de Fichiers", L"Peu de Fichiers", L"Normal", L"Beaucoup de Fichiers",
+	L"TrÃ¨s Beaucoup de Fichiers", L"Trop de Fichiers",
 };
 
-static const char *uscolornames[] = {
-	"Arc-en-Ceil", "Colours de Windows", "Blanc", "Gris Clair", "Gris Foncé",
-	"Rouge", "Orange", "Jaune", "Vert", "Aqua", "Bleu", "Violette",
+static const wchar_t *uscolornames[] = {
+	L"Arc-en-Ceil", L"Colours de Windows", L"Blanc", L"Gris Clair", L"Gris FoncÃ©",
+	L"Rouge", L"Orange", L"Jaune", L"Vert", L"Aqua", L"Bleu", L"Violette",
 };
 
-static const char *monthnames[] = {
-	"Jan", "Fev", "Mars", "Avril", "Mai", "Juin",
-	"Juil", "Août", "Sep", "Oct", "Nov", "Dec",
+static const wchar_t *monthnames[] = {
+	L"Jan", L"Fev", L"Mars", L"Avril", L"Mai", L"Juin",
+	L"Juil", L"AoÃ»t", L"Sep", L"Oct", L"Nov", L"Dec",
 };
 
-static const char *attribnames[] = {
-	"Arch", "Compress", "Dossier", "Encrypt", "Caché", "Pas-au-ligne",
-	"Lire-Seulement", "Reparse-Pt", "Clairsemé", "Système", "Temp",
+static const wchar_t *attribnames[] = {
+	L"Arch", L"Compress", L"Dossier", L"Encrypt", L"CachÃ©", L"Pas-au-ligne",
+	L"Lire-Seulement", L"Reparse-Pt", L"ClairsemÃ©", L"SystÃ¨me", L"Temp",
+};
+
+static const wchar_t *frtoolbarnames[] = {
+	L"Ouvrir", L"Rouvrir", L"Voir Tout", L"Vrombir", L"DÃ©marrer",
+	L"Espace Libre", L"ExÃ©cuter", L"Corbeille", L"Config", L"De SM",
+};
+
+static const wchar_t *frthemenames[] = {
+	L"ParamÃ¨tre de Windows", L"Clair", L"Sombre",
 };
 
 Lang LangFr = {
 	IDR_TOOLBAR_FR,
-	"De SpaceMonger",
-	"CE PROGRAMME EST FREEWARE.",
-	"«You may distribute this program freely.  Because this program is"
-		" free, the author cannot and will not assume responsibility"
-		" for this program's behavior.  There are no warranties of any"
-		" kind, expressed or implied, on this product.»",
-	"Vous avez des questions?  Trouvez un «bug»?  Voudriez quelque-chose?  "
-		"Envoyez e-mail à «sean@werkema.com».",
-	"D'accord", "Annul",
-	"octets", "Ko", "Mo", "Go",
-	"<l'Espace Libre: %d,%d%%>",
-	"&Vrombir", "&Démarrer", "Voir &Tout", "&Exécuter", "&Effacer",
-	"&Ouvrir un Disque...", "&Rouvrir", "&Montrer l'Espace Libre",
-	"%lu,%01lu%%", "%lu,%01lu %s",
-	"Total", "Libre", "Fichiers Totals:", "Dossiers Totals:", "Fichiers Trouvés:", "Dossiers Trouvés:",
-	',', '.',
+	L"De SpaceMonger",
+	L"CE PROGRAMME EST FREEWARE.",
+	L"Â«You may distribute this program freely.  Because this program is"
+		L" free, the author cannot and will not assume responsibility"
+		L" for this program's behavior.  There are no warranties of any"
+		L" kind, expressed or implied, on this product.Â»",
+	L"Vous avez des questions?  Trouvez un Â«bugÂ»?  Voudriez quelque-chose?  "
+		L"Envoyez e-mail Ã  Â«sean@werkema.comÂ».",
+	L"D'accord", L"Annul",
+	L"octets", L"Ko", L"Mo", L"Go",
+	L"<l'Espace Libre: %d,%d%%>",
+	L"&Vrombir", L"&DÃ©marrer", L"Voir &Tout", L"&ExÃ©cuter", L"Mettre Ã  la &Corbeille",
+	L"&Ouvrir un Disque...", L"&Rouvrir", L"&Montrer l'Espace Libre",
+	L"%lu,%01lu%%", L"%lu,%01lu %s",
+	L"Total", L"Libre", L"Fichiers Totals:", L"Dossiers Totals:", L"Fichiers TrouvÃ©s:", L"Dossiers TrouvÃ©s:",
+	L',', L'.',
 	densitynames, uscolornames, monthnames, attribnames,
-	"Effacer...",
-	"Choisir un Disque",
-	"Scruter le Disque...",
-	"Configuration de SpaceMonger",
-	"Orientation des Fichiers", "Densité:", "Orient:", "Horz", "Égale", "Vert",
-	"Colours", "Fichiers", "Dossiers",
-	"«ToolTips»", "Montrer Nom «ToolTips»", "Montrer Info «ToolTips»", "Délai:", "msec",
-	"Sentier", "Nom-fichier", "Petit Icon", "Icon", "Date/Heure", "Octets", "Attributs",
-	"Autres Options",
-	"Auto-Rouvrir à Effacer", "Pas de Command «Effacer»",
-	"Vrombir Animé", "Souvenir Position du Window",
-	"Montrer les Boites «Rollovers»",
-	"Properties...",
+	L"Effacer...",
+	L"Choisir un Disque",
+	L"Scruter le Disque...",
+	L"Configuration de SpaceMonger",
+	L"Orientation des Fichiers", L"DensitÃ©:", L"Orient:", L"Horz", L"Ã‰gale", L"Vert",
+	L"Colours", L"Fichiers", L"Dossiers",
+	L"Â«ToolTipsÂ»", L"Montrer Nom Â«ToolTipsÂ»", L"Montrer Info Â«ToolTipsÂ»", L"DÃ©lai:", L"msec",
+	L"Sentier", L"Nom-fichier", L"Petit Icon", L"Icon", L"Date/Heure", L"Octets", L"Attributs",
+	L"Autres Options",
+	L"Auto-Rouvrir Ã  Effacer", L"Pas de Command Â«EffacerÂ»",
+	L"Vrombir AnimÃ©", L"Souvenir Position du Window",
+	L"Montrer les Boites Â«RolloversÂ»",
+	L"Properties...",
+	frtoolbarnames,
+	L"To",
+	L"Afficher dans l'&Explorateur",
+	L"Ouvrir un &Dossier...",
+	L"&Dossier...",
+	L"Choisir un Dossier",
+	L"DÃ©placer ceci vers la Corbeille?\n\n%s",
+	L"Windows n'a pas pu dÃ©placer ceci vers la Corbeille.",
+	L"Analyse",
+	L"Ignorer les fichiers stockÃ©s uniquement dans le cloud (OneDrive, etc.)",
+	L"ThÃ¨me:",
+	frthemenames,
+	L"Scruter le Dossier...",
 };

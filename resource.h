@@ -86,14 +86,21 @@
 #define ID_FILE_DELETE                  40014
 #define ID_SETTINGS                     40017
 #define ID_FILE_PROPERTIES              40018
+#define ID_FILE_EXPLORE                 40019
+#define ID_FILE_OPEN_FOLDER             40020
+#define IDC_BROWSE                      1044
+#define IDC_SKIP_CLOUD                  1045
+#define IDC_THEME                       1046
+#define IDC_STATIC_THEME                1047
+#define IDC_STATIC_SCANOPTIONS          1048
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        124
-#define _APS_NEXT_COMMAND_VALUE         40019
-#define _APS_NEXT_CONTROL_VALUE         1044
+#define _APS_NEXT_COMMAND_VALUE         40021
+#define _APS_NEXT_CONTROL_VALUE         1049
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

@@ -2,6 +2,7 @@
 #include "stdafx.h"
 #include "SpaceMonger.h"
 #include "TipWnd.h"
+#include <windowsx.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -11,12 +12,12 @@ static char THIS_FILE[] = __FILE__;
 
 /***************************************************************************/
 
-#define CLASSNAME "TipWnd"
+#define CLASSNAME L"TipWnd"
 
 struct TipWndInfo {
 	HICON icon;
 	int flags;
-	char *text;
+	wchar_t *text;
 	int textlen;
 	HFONT font;
 	COLORREF bgcolor;
@@ -26,7 +27,7 @@ struct TipWndInfo {
 	unsigned char autoshow;
 	unsigned char autopos;
 	short int showdelay;
-	UINT timer, hidetimer;
+	UINT_PTR timer, hidetimer;
 	HWND owner;
 	int mousex, mousey;
 	BOOL hidden;
@@ -76,7 +77,7 @@ static void ComputeTextExtents(HDC dc, TipWndInfo *info, SIZE *size)
 {
 	// Scan the text to determine the longest line (in pixels) and the
 	// total height in pixels.
-	const char *start, *end;
+	const wchar_t *start, *end;
 	int maxlen = 0, height = 0;
 	SIZE linesize;
 	TEXTMETRIC tm;
@@ -84,11 +85,11 @@ static void ComputeTextExtents(HDC dc, TipWndInfo *info, SIZE *size)
 
 	start = info->text;
 	if (start != NULL) {
-		while (*start != '\0') {
+		while (*start != L'\0') {
 			end = start;
-			while (*end != '\0' && *end != '\n') end++;
+			while (*end != L'\0' && *end != L'\n') end++;
 			linesize.cx = linesize.cy = 0;
-			::GetTextExtentPoint32(dc, start, end-start, &linesize);
+			::GetTextExtentPoint32(dc, start, (int)(end-start), &linesize);
 			height += tm.tmAscent + tm.tmDescent;
 			if (linesize.cx > maxlen) maxlen = linesize.cx;
 			if (*end == '\n') end++;
@@ -105,18 +106,18 @@ static void DrawMultilineText(HDC dc, TipWndInfo *info, POINT *point)
 
 	// Scan the text to determine the longest line (in pixels) and the
 	// total height in pixels.
-	const char *start, *end;
+	const wchar_t *start, *end;
 	SIZE linesize;
 	TEXTMETRIC tm;
 	::GetTextMetrics(dc, &tm);
 
 	start = info->text;
 	if (start != NULL) {
-		while (*start != '\0') {
+		while (*start != L'\0') {
 			end = start;
-			while (*end != '\0' && *end != '\n') end++;
+			while (*end != L'\0' && *end != L'\n') end++;
 			linesize.cx = linesize.cy = 0;
-			::TextOut(dc, point->x, point->y, start, end-start);
+			::TextOut(dc, point->x, point->y, start, (int)(end-start));
 			point->y += tm.tmAscent + tm.tmDescent;
 			if (*end == '\n') end++;
 			start = end;
@@ -126,7 +127,7 @@ static void DrawMultilineText(HDC dc, TipWndInfo *info, POINT *point)
 
 static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	TipWndInfo *info = (TipWndInfo *)::GetWindowLong(hwnd, GWL_USERDATA);
+	TipWndInfo *info = (TipWndInfo *)::GetWindowLongPtr(hwnd, GWLP_USERDATA);
 	if (info == NULL && uMsg != WM_CREATE)
 		return ::DefWindowProc(hwnd, uMsg, wParam, lParam);
 
@@ -139,20 +140,21 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 		info->textlen = 0;
 		info->flags = TIPWND_ANCHOR_TOPLEFT|TIPWND_ALIGN_LEFT;
 		info->font = NULL;
-		info->bgcolor = GetSysColor(COLOR_INFOBK);
+		info->bgcolor = Theme_Color(COLOR_INFOBK);
 		info->bordercolor = RGB(0,0,0);
-		info->textcolor = GetSysColor(COLOR_INFOTEXT);
+		info->textcolor = Theme_Color(COLOR_INFOTEXT);
 		info->hpadding = 2;
 		info->vpadding = 2;
 		info->autoshow = 0;
 		info->autopos = 0;
 		info->showdelay = 1000;
+		info->timer = info->hidetimer = 0;
 		info->owner = NULL;
 		info->mousex = info->mousey = -32768;
 		info->hidden = 0;
 		info->enabled = 1;
 		info->ourmousex = info->ourmousey = -32768;
-		::SetWindowLong(hwnd, GWL_USERDATA, (LONG)info);
+		::SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)info);
 		return 0;
 
 	case WM_DESTROY:
@@ -189,7 +191,7 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 			SIZE iconoffset;
 			iconoffset.cx = iconoffset.cy = 0;
 			if (info->icon != NULL) {
-				int delta = (info->flags & 1) ? 32 : 16;
+				int delta = GetSystemMetrics((info->flags & 1) ? SM_CXICON : SM_CXSMICON);
 				switch (info->flags & 6) {
 				case TIPWND_ICON_LEFT:
 					pad.cx = delta + 4;
@@ -235,8 +237,11 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 			else textpoint.y = rect.bottom / 2 - textsize.cy / 2;
 
 			if (info->icon != NULL)
-				::DrawIcon(dc, textpoint.x+iconoffset.cx,
-					textpoint.y+iconoffset.cy, info->icon);
+				{
+					int iconsize = GetSystemMetrics((info->flags & 1) ? SM_CXICON : SM_CXSMICON);
+					::DrawIconEx(dc, textpoint.x+iconoffset.cx, textpoint.y+iconoffset.cy,
+						info->icon, iconsize, iconsize, 0, NULL, DI_NORMAL);
+				}
 			textpoint.x += pad.cx;
 			textpoint.y += pad.cy;
 			DrawMultilineText(dc, info, &textpoint);
@@ -288,21 +293,22 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 		return 0;
 
 	case WM_SETTEXT:
-		if ((const char *)lParam == NULL) lParam = (LPARAM)"<null>";
+		if ((const wchar_t *)lParam == NULL) lParam = (LPARAM)L"<null>";
 		if (info->text != NULL) {
-			if (!strcmp(info->text, (const char *)lParam)) return 0;
+			if (!wcscmp(info->text, (const wchar_t *)lParam)) return 0;
 			free(info->text);
 		}
-		info->textlen = strlen((const char *)lParam);
-		info->text = (char *)malloc(info->textlen+1);
-		strcpy(info->text, (const char *)lParam);
+		info->textlen = (int)wcslen((const wchar_t *)lParam);
+		info->text = (wchar_t *)malloc((info->textlen+1) * sizeof(wchar_t));
+		wcscpy(info->text, (const wchar_t *)lParam);
 		::RedrawWindow(hwnd, NULL, NULL, RDW_ERASE|RDW_INTERNALPAINT);
 		return 0;
 
 	case WM_GETTEXT:
-		if (lParam != NULL) {
-			strncpy((char *)lParam, info->text, (int)wParam);
-			((char *)lParam)[wParam-1] = '\0';
+		if (lParam != NULL && wParam > 0) {
+			if (info->text == NULL) { ((wchar_t *)lParam)[0] = L'\0'; return 0; }
+			wcsncpy((wchar_t *)lParam, info->text, (int)wParam);
+			((wchar_t *)lParam)[wParam-1] = L'\0';
 			if ((int)wParam > (int)info->textlen) return (LRESULT)info->textlen;
 			else return (LRESULT)wParam;
 		}
@@ -360,7 +366,7 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 				::SelectObject(dc, oldfont);
 				::ReleaseDC(hwnd, dc);
 				if (info->icon != NULL) {
-					int delta = (info->flags & 1) ? 32 : 16;
+					int delta = GetSystemMetrics((info->flags & 1) ? SM_CXICON : SM_CXSMICON);
 					switch (info->flags & 6) {
 					case TIPWND_ICON_LEFT:
 					case TIPWND_ICON_RIGHT:
@@ -407,7 +413,7 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 
 		case TW_SET_BGCOLOR:
 			if (lParam != (LPARAM)info->bgcolor) {
-				info->bgcolor = lParam;
+				info->bgcolor = (COLORREF)lParam;
 				::RedrawWindow(hwnd, NULL, NULL, RDW_ERASE|RDW_INTERNALPAINT);
 			}
 			return 0;
@@ -417,7 +423,7 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 
 		case TW_SET_TEXTCOLOR:
 			if (lParam != (LPARAM)info->textcolor) {
-				info->textcolor = lParam;
+				info->textcolor = (COLORREF)lParam;
 				::RedrawWindow(hwnd, NULL, NULL, RDW_ERASE|RDW_INTERNALPAINT);
 			}
 			return 0;
@@ -427,7 +433,7 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 
 		case TW_SET_BORDERCOLOR:
 			if (lParam != (LPARAM)info->bordercolor) {
-				info->bordercolor = lParam;
+				info->bordercolor = (COLORREF)lParam;
 				::RedrawWindow(hwnd, NULL, NULL, RDW_ERASE|RDW_INTERNALPAINT);
 			}
 			return 0;
@@ -514,10 +520,10 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 					|| msg->message == WM_SETFOCUS || msg->message == WM_KEYDOWN
 					|| msg->message == WM_KEYUP) {
 					if (msg->message == WM_MOUSEMOVE) {
-						if (info->mousex == LOWORD(msg->lParam)
-							&& info->mousey == HIWORD(msg->lParam)) return 0;
-						info->mousex = LOWORD(msg->lParam);
-						info->mousey = HIWORD(msg->lParam);
+						if (info->mousex == GET_X_LPARAM(msg->lParam)
+							&& info->mousey == GET_Y_LPARAM(msg->lParam)) return 0;
+						info->mousex = GET_X_LPARAM(msg->lParam);
+						info->mousey = GET_Y_LPARAM(msg->lParam);
 					}
 					if (info->timer != 0 && info->showdelay > 1) {
 						::KillTimer(hwnd, info->timer);
@@ -546,8 +552,8 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 	case WM_MBUTTONUP:
 		{
 			POINT point;
-			point.x = LOWORD(lParam);
-			point.y = HIWORD(lParam);
+			point.x = GET_X_LPARAM(lParam);
+			point.y = GET_Y_LPARAM(lParam);
 			::ClientToScreen(hwnd, &point);
 			::ScreenToClient(info->owner, &point);
 			::SendMessage(info->owner, uMsg, wParam, MAKELPARAM(point.x, point.y));
@@ -557,8 +563,8 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 	case WM_MOUSEMOVE:
 		{
 			POINT point;
-			point.x = LOWORD(lParam);
-			point.y = HIWORD(lParam);
+			point.x = GET_X_LPARAM(lParam);
+			point.y = GET_Y_LPARAM(lParam);
 			if (point.x != info->ourmousex || point.y != info->ourmousey) {
 				info->ourmousex = point.x, info->ourmousey = point.y;
 				::ClientToScreen(hwnd, &point);
@@ -581,10 +587,13 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 					POINT point;
 					::GetWindowRect(hwnd, &rect);
 					::GetCursorPos(&point);
-					if (point.x + (rect.right-rect.left) > GetSystemMetrics(SM_CXSCREEN) - 16)
-						point.x = GetSystemMetrics(SM_CXSCREEN) - (rect.right-rect.left) - 16;
-					if (point.y + (rect.bottom-rect.top) > GetSystemMetrics(SM_CYSCREEN) - 16)
-						point.y = GetSystemMetrics(SM_CYSCREEN) - (rect.bottom-rect.top) - 16;
+					MONITORINFO mi;
+					mi.cbSize = sizeof(mi);
+					::GetMonitorInfo(::MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST), &mi);
+					if (point.x + (rect.right-rect.left) > mi.rcWork.right - 16)
+						point.x = mi.rcWork.right - (rect.right-rect.left) - 16;
+					if (point.y + (rect.bottom-rect.top) > mi.rcWork.bottom - 16)
+						point.y = mi.rcWork.bottom - (rect.bottom-rect.top) - 16;
 					if (rect.left != point.x+16 || rect.top != point.y+16) {
 						::SetWindowPos(hwnd, NULL, point.x+16, point.y+16,
 							rect.right-rect.left, rect.bottom-rect.top, SWP_NOACTIVATE|SWP_NOZORDER);
@@ -609,9 +618,9 @@ static LRESULT CALLBACK TipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
 			HWND wnd = ::WindowFromPoint(point);
 			// If the window the mouse is over is a TipWnd, then the mouse is
 			// really just over that TipWnd's owner.
-			char cname[32];
+			wchar_t cname[32];
 			::GetClassName(wnd, cname, 31);
-			if (!strcmp(cname, CLASSNAME))
+			if (!wcscmp(cname, CLASSNAME))
 				wnd = (HWND)::SendMessage(wnd, WM_COMMAND, TW_GET_OWNER, 0);
 			// If the mouse has moved out of this TipWnd's owner, hide the TipWnd.
 			if (wnd != info->owner) {
@@ -641,6 +650,7 @@ void WINAPI ::InitTipWnd(HINSTANCE inst)
 
 	if (initted) return;
 
+	theInst = inst;
 	WNDCLASSEX wc;
 
 	wc.cbSize = sizeof(WNDCLASSEX);
@@ -663,16 +673,16 @@ void WINAPI ::InitTipWnd(HINSTANCE inst)
 
 HWND WINAPI ::CreateTipWnd(HWND owner, const RECT *rect, BOOL showwnd)
 {
-	HWND hwnd = ::CreateWindowEx(WS_EX_TOPMOST, CLASSNAME, "", WS_POPUP,
+	HWND hwnd = ::CreateWindowEx(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE, CLASSNAME, L"", WS_POPUP,
 		rect->left, rect->top, rect->right-rect->left, rect->bottom-rect->top,
 		owner, NULL, theInst, NULL);
-	TipWndInfo *info = (TipWndInfo *)::GetWindowLong(hwnd, GWL_USERDATA);
+	TipWndInfo *info = (TipWndInfo *)::GetWindowLongPtr(hwnd, GWLP_USERDATA);
 	if (info != NULL) info->owner = owner;
 	return hwnd;
 }
 
 HWND WINAPI ::CreateTipWndEz(HWND owner, int x, int y,
-	const char *text, HICON icon, BOOL showwnd)
+	const wchar_t *text, HICON icon, BOOL showwnd)
 {
 	POINT point;
 	point.x = x, point.y = y;
@@ -715,9 +725,9 @@ CTipWnd::~CTipWnd()
 BOOL CTipWnd::Create(CWnd *owner, const RECT &rect, BOOL showwnd)
 {
 	CWnd *pWnd = this;
-	if (!pWnd->CreateEx(WS_EX_TOPMOST, _T(CLASSNAME), _T(""), WS_POPUP, rect, owner, 0, NULL))
+	if (!pWnd->CreateEx(WS_EX_TOPMOST|WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE, CLASSNAME, L"", WS_POPUP, rect, owner, 0, NULL))
 		return 0;
-	TipWndInfo *info = (TipWndInfo *)::GetWindowLong(m_hWnd, GWL_USERDATA);
+	TipWndInfo *info = (TipWndInfo *)::GetWindowLongPtr(m_hWnd, GWLP_USERDATA);
 	if (info != NULL) info->owner = owner->m_hWnd;
 
 	if (showwnd) {
@@ -761,16 +771,18 @@ void CTipWnd::PushOnScreen(void)
 {
 	CRect rect;
 	GetWindowRect(&rect);
-	short int scrnwidth = GetSystemMetrics(SM_CXSCREEN);
-	short int scrnheight = GetSystemMetrics(SM_CYSCREEN);
-	if (rect.right > scrnwidth)
-		rect.left -= rect.right-scrnwidth, rect.right = scrnwidth;
-	if (rect.bottom > scrnheight)
-		rect.top -= rect.bottom-scrnheight, rect.top = scrnheight;
-	if (rect.left < 0)
-		rect.right -= 0-rect.left, rect.left = 0;
-	if (rect.top < 0)
-		rect.bottom -= 0-rect.top, rect.top = 0;
+	MONITORINFO mi;
+	mi.cbSize = sizeof(mi);
+	::GetMonitorInfo(::MonitorFromRect(&rect, MONITOR_DEFAULTTONEAREST), &mi);
+	const RECT &screen = mi.rcMonitor;
+	if (rect.right > screen.right)
+		rect.left -= rect.right-screen.right, rect.right = screen.right;
+	if (rect.bottom > screen.bottom)
+		rect.top -= rect.bottom-screen.bottom, rect.bottom = screen.bottom;
+	if (rect.left < screen.left)
+		rect.right += screen.left-rect.left, rect.left = screen.left;
+	if (rect.top < screen.top)
+		rect.bottom += screen.top-rect.top, rect.top = screen.top;
 	SetWindowPos(NULL, rect.left, rect.top, rect.right-rect.left, rect.bottom-rect.top,
 		SWP_NOACTIVATE|SWP_NOZORDER|SWP_NOSIZE);
 }

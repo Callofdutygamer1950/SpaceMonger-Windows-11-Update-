@@ -5,9 +5,9 @@
 #include "TipWnd.h"
 
 struct CDisplayFolder {
-	char *name;
+	wchar_t *name;
 	si32 depth;
-	ui32 flags;				// 1=folder
+	ui32 flags;				// 1=folder, 2=free space, 4=highlighted
 	CFolder *source;
 	ui32 index;
 	si16 x, y, w, h;
@@ -24,6 +24,7 @@ public:
 	virtual void SetPalette(void);
 
 	void BuildTitleReverse(CFolder *folder, CString &string);
+	CString GetFullPath(CDisplayFolder *cur);
 	CDisplayFolder *GetDisplayFolderFromPoint(const CPoint &point);
 	CDisplayFolder *GetContainerDisplayFolderFromPoint(const CPoint &point);
 	void HighlightPathAtPoint(const CPoint &point);
@@ -43,6 +44,8 @@ public:
 		{ return zoomlevel == 0; }
 
 	void UpdateTitleBar(void);
+	void UpdateMetrics(void);		// Call when the DPI or theme changes
+	void Redraw(void);
 
 	void SelectFolder(CDisplayFolder *cur);
 
@@ -54,6 +57,8 @@ protected:
 protected:
 	//{{AFX_MSG(CFolderView)
 	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg void OnPaint();
+	afx_msg BOOL OnEraseBkgnd(CDC *pDC);
 	afx_msg void OnLButtonDown(UINT flags, CPoint point);
 	afx_msg void OnLButtonDblClk(UINT flags, CPoint point);
 	afx_msg void OnRButtonUp(UINT flags, CPoint point);
@@ -80,6 +85,8 @@ protected:
 	void AnimateBox(const CRect &start, const CRect &end);
 	void SetupInfoTip(CDisplayFolder *cur);
 	void SetupNameTip(CDisplayFolder *cur);
+	ui64 GetPercentBase(void);
+	inline int Px(int value) { return Dpi_Scale(value, m_dpi); }
 
 protected:
 	CPalette m_palette;
@@ -91,6 +98,10 @@ protected:
 	CTipWnd m_infotipwnd;
 	CTipWnd m_nametipwnd;
 	CDisplayFolder *lastcur;
+
+	int m_dpi;			// Current DPI of the view
+	int m_border;		// Folder border thickness, in pixels
+	int m_line;			// Height of a line of text, in pixels
 
 public:
 	int zoomlevel;

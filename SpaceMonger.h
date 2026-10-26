@@ -39,7 +39,10 @@ struct CCurrentSettings {
 	int infotip_flags;		// Tooltip flags
 	int infotip_delay;		// Tip delay, in milliseconds
 
-	char lang[4];			// Language, by two-letter code
+	BOOL skip_cloud_only;	// Leave out cloud-only (OneDrive, etc.) files
+	int theme;				// THEME_SYSTEM, THEME_LIGHT, or THEME_DARK
+
+	wchar_t lang[4];		// Language, by two-letter code
 
 	void Reset(void);		// Reset to default values
 	void Load(void);		// Retrieve current settings from Registry
@@ -60,6 +63,8 @@ public:
 	afx_msg void OnAbout();
 	afx_msg void OnAppExit(void);
 	afx_msg void OnFileOpen(void);
+	afx_msg void OnFileOpenFolder(void);
+	afx_msg void OnFileExplore(void);
 	afx_msg void OnFileRefresh(void);
 	afx_msg void OnFileRun(void);
 	afx_msg void OnFileDelete(void);
@@ -74,6 +79,9 @@ public:
 	DECLARE_MESSAGE_MAP()
 
 public:
+	void OpenPath(const CString &path);
+	void ApplyTheme(void);
+
 	CFrameWnd *m_mainframe;
 	CFreeDoc *m_document;
 	CFreeView *m_view;
@@ -84,6 +92,7 @@ public:
 };
 
 void GeneralIgnoreUpdate(CCmdUI *ui);
+BOOL PickFolder(HWND owner, CString &path);
 
 extern CSpaceMonger theApp;
 

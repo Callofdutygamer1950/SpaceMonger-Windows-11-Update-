@@ -19,12 +19,6 @@ typedef short int sym;
 #define until(n) while (!(n))
 #define unless(n) if (!(n))
 
-#define true 1
-#define TRUE 1
-#define True 1
-#define false 0
-#define FALSE 0
-#define False 0
+// true/false/TRUE/FALSE come from C++ and <windows.h> now.
 
 #endif
-

@@ -18,7 +18,7 @@
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
 #ifdef _WIN32
 LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
-#pragma code_page(1252)
+#pragma code_page(65001)
 #endif //_WIN32
 
 /////////////////////////////////////////////////////////////////////////////
@@ -26,16 +26,16 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 // Dialog
 //
 
-IDD_ABOUT DIALOG DISCARDABLE  0, 0, 239, 145
-STYLE DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE | 
+IDD_ABOUT DIALOGEX 0, 0, 239, 145
+STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE |
     WS_CAPTION | WS_SYSMENU
-FONT 8, "MS Sans Serif"
+FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     DEFPUSHBUTTON   "",IDOK,94,124,50,14
     ICON            ID_SPACEMONGER,IDC_STATIC,7,9,20,20
-    LTEXT           "SpaceMonger Version 1.4.0",IDC_STATIC,37,9,95,10
-    LTEXT           "Copyright © 1998, 1999, 2000 by Sean Werkema",
-                    IDC_STATIC,37,18,168,8
+    LTEXT           "SpaceMonger Version 1.5.0 (Windows 11 update)",IDC_STATIC,37,9,195,10
+    LTEXT           "Copyright Â© 1998, 1999, 2000 by Sean Werkema",
+                    IDC_STATIC,37,18,195,8
     LTEXT           "",IDC_STATIC_FREEWARE,37,41,195,10
     LTEXT           "",IDC_STATIC_WARRANTY,37,55,195,34
     CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,37,34,195,1
@@ -43,79 +43,85 @@ BEGIN
     CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,37,115,195,1
 END
 
-IDD_OPEN_DIALOG DIALOG DISCARDABLE  0, 0, 221, 170
-STYLE DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE | 
+IDD_OPEN_DIALOG DIALOGEX 0, 0, 221, 170
+STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE |
     WS_CAPTION | WS_SYSMENU
-FONT 8, "MS Sans Serif"
+FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    DEFPUSHBUTTON   "",IDOK,113,151,50,14
-    PUSHBUTTON      "",IDCANCEL,58,151,50,14
-    CONTROL         "",IDC_DRIVE_LIST,"SysListView32",LVS_SINGLESEL | 
-                    LVS_SORTASCENDING | LVS_AUTOARRANGE | WS_BORDER | 
-                    WS_TABSTOP,7,5,207,139
+    CONTROL         "",IDC_DRIVE_LIST,"SysListView32",LVS_SINGLESEL |
+                    LVS_SORTASCENDING | LVS_AUTOARRANGE | LVS_SHOWSELALWAYS |
+                    WS_BORDER | WS_TABSTOP,7,5,207,139
+    PUSHBUTTON      "",IDC_BROWSE,7,151,60,14
+    DEFPUSHBUTTON   "",IDOK,110,151,50,14
+    PUSHBUTTON      "",IDCANCEL,164,151,50,14
 END
 
 IDD_SCAN_DIALOG DIALOGEX 0, 0, 250, 54
-STYLE DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE | 
+STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP |
     WS_CAPTION
 EXSTYLE WS_EX_TOOLWINDOW
-FONT 8, "MS Sans Serif"
+FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
     PUSHBUTTON      "",IDCANCEL,203,24,40,14
-    LTEXT           "",IDC_STATIC_FILESFOUND,103,21,66,8
-    LTEXT           "",IDC_STATIC_FOLDERSFOUND,103,30,66,8
-    LTEXT           "",IDC_PATH,7,4,236,9
-    LTEXT           "0",IDC_FILES,171,21,30,8
-    LTEXT           "0",IDC_FOLDERS,171,30,30,8
-    CONTROL         "",IDC_LOAD_PROGRESS,"msctls_progress32",WS_BORDER,7,44,
+    LTEXT           "",IDC_STATIC_FILESFOUND,103,21,62,8
+    LTEXT           "",IDC_STATIC_FOLDERSFOUND,103,30,62,8
+    LTEXT           "",IDC_PATH,7,4,236,9,SS_PATHELLIPSIS | SS_NOPREFIX
+    RTEXT           "0",IDC_FILES,163,21,36,8
+    RTEXT           "0",IDC_FOLDERS,163,30,36,8
+    CONTROL         "",IDC_LOAD_PROGRESS,"msctls_progress32",0x0,7,44,
                     236,6
 END
 
-IDD_SETTINGS DIALOG DISCARDABLE  0, 0, 280, 213
-STYLE DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE | 
+IDD_SETTINGS DIALOGEX 0, 0, 280, 260
+STYLE DS_SETFONT | DS_MODALFRAME | DS_SETFOREGROUND | DS_3DLOOK | WS_POPUP | WS_VISIBLE |
     WS_CAPTION | WS_SYSMENU
-FONT 8, "MS Sans Serif"
+FONT 9, "Segoe UI", 400, 0, 0x1
 BEGIN
-    COMBOBOX        IDC_LANG,191,8,82,101,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_LANG,191,8,82,101,CBS_DROPDOWNLIST | WS_VSCROLL |
                     WS_TABSTOP
-    COMBOBOX        IDC_DENSITY,42,18,90,85,CBS_DROPDOWNLIST | WS_GROUP | 
+    COMBOBOX        IDC_DENSITY,42,18,90,85,CBS_DROPDOWNLIST | WS_GROUP |
                     WS_TABSTOP
-    CONTROL         "",IDC_BIAS,"msctls_trackbar32",TBS_AUTOTICKS | TBS_TOP | 
+    CONTROL         "",IDC_BIAS,"msctls_trackbar32",TBS_AUTOTICKS | TBS_TOP |
                     WS_TABSTOP,39,49,95,17
-    COMBOBOX        IDC_FILE_COLOR,191,40,72,143,CBS_DROPDOWNLIST | WS_GROUP | 
+    COMBOBOX        IDC_FILE_COLOR,191,40,72,143,CBS_DROPDOWNLIST | WS_GROUP |
                     WS_TABSTOP
-    COMBOBOX        IDC_FOLDER_COLOR,191,55,72,142,CBS_DROPDOWNLIST | 
+    COMBOBOX        IDC_FOLDER_COLOR,191,55,72,142,CBS_DROPDOWNLIST |
                     WS_TABSTOP
-    CONTROL         "",IDC_SHOW_NAME_TIPS,"Button",BS_AUTOCHECKBOX | 
+    CONTROL         "",IDC_SHOW_NAME_TIPS,"Button",BS_AUTOCHECKBOX |
                     WS_GROUP | WS_TABSTOP,24,85,104,10
     EDITTEXT        IDC_NAMETIP_DELAY,59,96,27,12,ES_NUMBER | WS_GROUP
-    CONTROL         "",IDC_SHOW_ROLLOVER_BOX,"Button",BS_AUTOCHECKBOX | 
+    CONTROL         "",IDC_SHOW_ROLLOVER_BOX,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,24,126,119,8
-    CONTROL         "",IDC_SHOW_INFO_TIPS,"Button",BS_AUTOCHECKBOX | 
+    CONTROL         "",IDC_SHOW_INFO_TIPS,"Button",BS_AUTOCHECKBOX |
                     WS_GROUP | WS_TABSTOP,144,85,104,10
-    CONTROL         "",IDC_INFOTIP_PATH,"Button",BS_AUTOCHECKBOX | WS_GROUP | 
+    CONTROL         "",IDC_INFOTIP_PATH,"Button",BS_AUTOCHECKBOX | WS_GROUP |
                     WS_TABSTOP,153,96,50,10
-    CONTROL         "",IDC_INFOTIP_DATE,"Button",BS_AUTOCHECKBOX | 
-                    WS_TABSTOP,205,96,50,10
-    CONTROL         "",IDC_INFOTIP_NAME,"Button",BS_AUTOCHECKBOX | 
+    CONTROL         "",IDC_INFOTIP_DATE,"Button",BS_AUTOCHECKBOX |
+                    WS_TABSTOP,205,96,60,10
+    CONTROL         "",IDC_INFOTIP_NAME,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,153,106,50,10
-    CONTROL         "",IDC_INFOTIP_SIZE,"Button",BS_AUTOCHECKBOX | 
-                    WS_TABSTOP,205,106,50,10
-    CONTROL         "",IDC_INFOTIP_ICON,"Button",BS_AUTOCHECKBOX | 
+    CONTROL         "",IDC_INFOTIP_SIZE,"Button",BS_AUTOCHECKBOX |
+                    WS_TABSTOP,205,106,60,10
+    CONTROL         "",IDC_INFOTIP_ICON,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,153,116,50,10
-    CONTROL         "",IDC_INFOTIP_ATTRIB,"Button",BS_AUTOCHECKBOX | 
-                    WS_TABSTOP,205,116,50,10
+    CONTROL         "",IDC_INFOTIP_ATTRIB,"Button",BS_AUTOCHECKBOX |
+                    WS_TABSTOP,205,116,60,10
     EDITTEXT        IDC_INFOTIP_DELAY,182,129,27,12,ES_NUMBER | WS_GROUP
-    CONTROL         "",IDC_AUTO_RESCAN,"Button",BS_AUTOCHECKBOX | WS_GROUP | 
-                    WS_TABSTOP,24,160,120,10
-    CONTROL         "",IDC_DISABLE_DELETE,"Button",BS_AUTOCHECKBOX | 
-                    WS_TABSTOP,24,171,120,10
+    CONTROL         "",IDC_AUTO_RESCAN,"Button",BS_AUTOCHECKBOX | WS_GROUP |
+                    WS_TABSTOP,14,160,124,10
+    CONTROL         "",IDC_DISABLE_DELETE,"Button",BS_AUTOCHECKBOX |
+                    WS_TABSTOP,14,171,124,10
     CONTROL         "",IDC_ANIMATED,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,
-                    144,160,120,10
+                    144,160,124,10
     CONTROL         "",IDC_SAVE_POS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,
-                    144,171,120,10
-    PUSHBUTTON      "",IDCANCEL,86,194,50,14,WS_GROUP
-    DEFPUSHBUTTON   "",IDOK,142,194,50,14
+                    144,171,124,10
+    CONTROL         "",IDC_SKIP_CLOUD,"Button",BS_AUTOCHECKBOX | WS_GROUP |
+                    WS_TABSTOP,14,201,254,10
+    LTEXT           "",IDC_STATIC_THEME,14,226,40,8
+    COMBOBOX        IDC_THEME,56,224,110,60,CBS_DROPDOWNLIST | WS_GROUP |
+                    WS_TABSTOP
+    PUSHBUTTON      "",IDCANCEL,86,240,50,14,WS_GROUP
+    DEFPUSHBUTTON   "",IDOK,142,240,50,14
     LTEXT           "",IDC_STATIC_DENSITY,14,20,27,8
     LTEXT           "",IDC_STATIC_FILES,160,43,30,8
     LTEXT           "",IDC_STATIC_BIAS,14,55,24,8
@@ -129,6 +135,7 @@ BEGIN
     GROUPBOX        "",IDC_STATIC_DISPLAYCOLORS,153,29,120,43
     GROUPBOX        "",IDC_STATIC_TOOLTIPS,7,74,266,73
     GROUPBOX        "",IDC_STATIC_MISCOPTIONS,6,149,267,38
+    GROUPBOX        "",IDC_STATIC_SCANOPTIONS,6,190,267,26
     LTEXT           "",IDC_STATIC_NAMETIP1,30,98,28,8
     LTEXT           "",IDC_STATIC_NAMETIP2,89,98,25,8
 END
@@ -196,7 +203,7 @@ END
 
 3 TEXTINCLUDE DISCARDABLE 
 BEGIN
-    "\r\n"
+    "#include ""afxres.rc""\r\n"
     "\0"
 END
 
@@ -217,43 +224,7 @@ ID_SPACEMONGER          ICON    DISCARDABLE     "res\\SpaceMonger.ico"
 // Toolbar
 //
 
-IDR_TOOLBAR_EN TOOLBAR DISCARDABLE  44, 15
-BEGIN
-    BUTTON      ID_FILE_OPEN
-    BUTTON      ID_FILE_REFRESH
-    SEPARATOR
-    BUTTON      ID_VIEW_ZOOM_FULL
-    BUTTON      ID_VIEW_ZOOM_IN
-    BUTTON      ID_VIEW_ZOOM_OUT
-    SEPARATOR
-    BUTTON      ID_VIEW_FREE
-    SEPARATOR
-    BUTTON      ID_FILE_RUN
-    BUTTON      ID_FILE_DELETE
-    SEPARATOR
-    BUTTON      ID_SETTINGS
-    SEPARATOR
-    BUTTON      ID_APP_ABOUT
-END
 
-IDR_TOOLBAR_FR TOOLBAR DISCARDABLE  44, 15
-BEGIN
-    BUTTON      ID_FILE_OPEN
-    BUTTON      ID_FILE_REFRESH
-    SEPARATOR
-    BUTTON      ID_VIEW_ZOOM_FULL
-    BUTTON      ID_VIEW_ZOOM_IN
-    BUTTON      ID_VIEW_ZOOM_OUT
-    SEPARATOR
-    BUTTON      ID_VIEW_FREE
-    SEPARATOR
-    BUTTON      ID_FILE_RUN
-    BUTTON      ID_FILE_DELETE
-    SEPARATOR
-    BUTTON      ID_SETTINGS
-    SEPARATOR
-    BUTTON      ID_APP_ABOUT
-END
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -275,8 +246,8 @@ IDR_TOOLBAR_FR          BITMAP  DISCARDABLE     "res\\toolbar_fr.bmp"
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,4,0,1
- PRODUCTVERSION 1,4,0,1
+ FILEVERSION 1,5,0,0
+ PRODUCTVERSION 1,5,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -294,14 +265,14 @@ BEGIN
             VALUE "Comments", "Visit http://www.werkema.com/software/spacemonger.html for the latest version\0"
             VALUE "CompanyName", "65 Systems\0"
             VALUE "FileDescription", "SpaceMonger Program File\0"
-            VALUE "FileVersion", "1, 4, 0, 1\0"
+            VALUE "FileVersion", "1, 5, 0, 0\0"
             VALUE "InternalName", "SpaceMonger\0"
-            VALUE "LegalCopyright", "Copyright © 1997-2000 Sean Werkema\0"
+            VALUE "LegalCopyright", "Copyright Â© 1997-2000 Sean Werkema\0"
             VALUE "LegalTrademarks", "\0"
             VALUE "OriginalFilename", "SpaceMonger.exe\0"
             VALUE "PrivateBuild", "\0"
             VALUE "ProductName", "SpaceMonger\0"
-            VALUE "ProductVersion", "1, 4, 0, 1\0"
+            VALUE "ProductVersion", "1, 5, 0, 0\0"
             VALUE "SpecialBuild", "\0"
         END
     END
@@ -324,6 +295,7 @@ END
 // Generated from the TEXTINCLUDE 3 resource.
 //
 
+#include "afxres.rc"
 
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED

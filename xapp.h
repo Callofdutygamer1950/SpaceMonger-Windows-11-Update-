@@ -6,18 +6,36 @@ class CFreeDoc;
 class CFreeView;
 
 /******************************************************************************
+**  Theme (light/dark) and DPI support.  See Theme.cpp.
+*/
+
+enum { THEME_SYSTEM = 0, THEME_LIGHT = 1, THEME_DARK = 2 };
+
+void Theme_Init(void);					// Call once at startup
+void Theme_Update(int setting);			// Re-evaluate after a setting/system change
+BOOL Theme_IsDark(void);				// Is dark mode currently in effect?
+COLORREF Theme_Color(int syscolor);		// Like GetSysColor(), but theme-aware
+HBRUSH Theme_Brush(int syscolor);		// Like GetSysColorBrush(), but theme-aware
+void Theme_ApplyToWindow(HWND hwnd);	// Title bar + child controls
+HBRUSH Theme_OnCtlColor(HDC dc, HWND ctl, UINT ctltype);	// NULL = use default
+
+int Dpi_ForWindow(HWND hwnd);
+inline int Dpi_Scale(int value, int dpi) { return MulDiv(value, dpi, 96); }
+HFONT Dpi_CreateUIFont(int dpi, int points = 9, int weight = FW_NORMAL);
+
+/******************************************************************************
 **  Painting utility functions
 */
 
-#define ColorWindowBack (GetSysColorBrush(COLOR_APPWORKSPACE))
-#define ColorText (GetSysColorBrush(COLOR_WINDOWTEXT))
-#define ColorTextBack (GetSysColorBrush(COLOR_WINDOW))
-#define ColorBright (GetSysColorBrush(COLOR_3DHIGHLIGHT))
-#define ColorFlat (GetSysColorBrush(COLOR_3DFACE))
-#define ColorDark (GetSysColorBrush(COLOR_3DSHADOW))
-#define ColorBorder (GetSysColorBrush(COLOR_3DDKSHADOW))
-#define ColorActive (GetSysColorBrush(COLOR_ACTIVECAPTION))
-#define ColorInactive (GetSysColorBrush(COLOR_INACTIVECAPTION))
+#define ColorWindowBack (Theme_Brush(COLOR_APPWORKSPACE))
+#define ColorText (Theme_Brush(COLOR_WINDOWTEXT))
+#define ColorTextBack (Theme_Brush(COLOR_WINDOW))
+#define ColorBright (Theme_Brush(COLOR_3DHIGHLIGHT))
+#define ColorFlat (Theme_Brush(COLOR_3DFACE))
+#define ColorDark (Theme_Brush(COLOR_3DSHADOW))
+#define ColorBorder (Theme_Brush(COLOR_3DDKSHADOW))
+#define ColorActive (Theme_Brush(COLOR_ACTIVECAPTION))
+#define ColorInactive (Theme_Brush(COLOR_INACTIVECAPTION))
 	
 /*
 **  DrawHLine
@@ -114,8 +132,8 @@ inline static void FillDualBox(HDC dc, HBRUSH topleft, HBRUSH bottomright,
 	FillRect(dc, &rect, topleft);
 	rect.left = x + width - 1, rect.right = x + width;
 	FillRect(dc, &rect, bottomright);
-	rect.top = y + 1, rect.bottom = y + width - 2;
-	rect.left = x + 1, rect.right = x + width - 2;
+	rect.top = y + 1, rect.bottom = y + height - 1;
+	rect.left = x + 1, rect.right = x + width - 1;
 	FillRect(dc, &rect, fill);
 }
 
