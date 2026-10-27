@@ -29,12 +29,15 @@ INSTALLATION
 ------------
 
 1. Go to the Releases page of the GitHub project above and download
-   SpaceMonger.exe from the latest release.
+   the .zip file from the latest release (for example,
+   SpaceMonger-1.5.0-Windows-x64.zip).
 
-2. Put it in any folder you like.  SpaceMonger doesn't need to be
-   installed; the .exe is the complete program.
+2. Right-click the .zip file and choose "Extract All...", then pick any
+   folder you like.  SpaceMonger doesn't need to be installed;
+   SpaceMonger.exe is the complete program.  Keep the license files with
+   it if you share it.
 
-3. Double-click it to run it.
+3. Double-click SpaceMonger.exe to run it.
 
 The first time you run it, Windows may show "Windows protected your PC",
 because the program isn't digitally signed.  Click "More info", then
