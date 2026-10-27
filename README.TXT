@@ -11,9 +11,10 @@ computer.  Instead of viewing your disk as unhelpful little icons or
 pie charts, you see a single picture that shows you at a glance how
 much space every file and folder are using.
 
-The latest version of SpaceMonger is always available at its web page:
+The latest version of this Windows 11 update, with its source code, is
+available at:
 
-    http://www.werkema.com/software/spacemonger.html
+    https://github.com/Callofdutygamer1950/SpaceMonger-Windows-11-Update-
 
 
 SYSTEM REQUIREMENTS
@@ -179,7 +180,7 @@ COPYRIGHT AND CONTACT INFORMATION
 ---------------------------------
 
 SpaceMonger is Copyright (C) 1998, 1999, and 2000 by Sean Werkema.
-Have questions?  Found a bug?  Want a feature?	Compose your thoughts in
-an e-mail and send them to sean@werkema.com.  I should be able to respond
-within a few days of your message.
+The Windows 11 update is Copyright (C) 2026 Joey's IT Support.
+Have questions?  Found a bug?  Want a feature?  Send an e-mail to
+JoeysItSupport@gmail.com, or open an issue at the GitHub page above.
 
