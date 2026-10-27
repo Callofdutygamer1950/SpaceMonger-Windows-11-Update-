@@ -76,11 +76,11 @@ static const LangExtra ExtraEn = {
 Lang LangUs = {
 	IDR_TOOLBAR_EN,
 	L"About SpaceMonger",
-	L"THIS PROGRAM IS FREEWARE.",
-	L"You may distribute this program freely.  Because this program is"
-		L" free, the author cannot and will not assume responsibility"
-		L" for this program's behavior.  There are no warranties of any"
-		L" kind, expressed or implied, on this product.",
+	L"THIS PROGRAM IS FREE, OPEN-SOURCE SOFTWARE.",
+	L"You may share and change it under the GNU General Public License,"
+		L" version 3 (see LICENSE.txt).  Versions you share must stay open"
+		L" source under the same license.  This program comes with"
+		L" NO WARRANTY of any kind, expressed or implied.",
 	L"Have questions?  Found a bug?  Want a feature?\n"
 		L"E-mail to <JoeysItSupport@gmail.com>.",
 	L"OK", L"Cancel",
@@ -130,11 +130,11 @@ static const wchar_t *ukcolornames[] = {
 Lang LangUk = {
 	IDR_TOOLBAR_EN,
 	L"About SpaceMonger",
-	L"THIS PROGRAM IS FREEWARE.",
-	L"You may distribute this program freely.  Because this program is"
-		L" free, the author cannot and will not assume responsibility"
-		L" for this program's behavior.  There are no warranties of any"
-		L" kind, expressed or implied, on this product.",
+	L"THIS PROGRAM IS FREE, OPEN-SOURCE SOFTWARE.",
+	L"You may share and change it under the GNU General Public License,"
+		L" version 3 (see LICENSE.txt).  Versions you share must stay open"
+		L" source under the same license.  This program comes with"
+		L" NO WARRANTY of any kind, expressed or implied.",
 	L"Have questions?  Found a bug?  Want a feature?\n"
 		L"E-mail to <JoeysItSupport@gmail.com>.",
 	L"OK", L"Cancel",

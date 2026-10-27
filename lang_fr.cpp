@@ -65,11 +65,11 @@ static const LangExtra ExtraFr = {
 Lang LangFr = {
 	IDR_TOOLBAR_FR,
 	L"De SpaceMonger",
-	L"CE PROGRAMME EST FREEWARE.",
-	L"«You may distribute this program freely.  Because this program is"
-		L" free, the author cannot and will not assume responsibility"
-		L" for this program's behavior.  There are no warranties of any"
-		L" kind, expressed or implied, on this product.»",
+	L"CE PROGRAMME EST UN LOGICIEL LIBRE ET GRATUIT.",
+	L"Vous pouvez le partager et le modifier selon la Licence Publique"
+		L" Générale GNU, version 3 (voir LICENSE.txt).  Les versions que vous"
+		L" partagez doivent rester libres sous la même licence.  Ce programme"
+		L" est fourni SANS AUCUNE GARANTIE, expresse ou implicite.",
 	L"Vous avez des questions?  Trouvez un «bug»?  Voudriez quelque-chose?  "
 		L"Envoyez e-mail à «JoeysItSupport@gmail.com».",
 	L"D'accord", L"Annul",
