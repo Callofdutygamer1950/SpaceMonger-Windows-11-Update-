@@ -47,8 +47,9 @@ set LFLAGS=/nologo /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup /DEBUG /MANIFEST
 if /i not "%CONFIG%"=="Debug" set LFLAGS=%LFLAGS% /LTCG /OPT:REF /OPT:ICF
 link %LFLAGS% /OUT:%BIN%\SpaceMonger.exe %OBJ%\*.obj %OBJ%\SpaceMonger.res shlwapi.lib dwmapi.lib uxtheme.lib comctl32.lib msimg32.lib || exit /b 1
 
-rem The MIT License asks that its notice go along with every copy.
+rem Both licenses (GPL v3, and the original MIT notice) go along with every copy.
 copy /y LICENSE.txt %BIN%\LICENSE.txt >nul
+copy /y LICENSE-ORIGINAL-MIT.txt %BIN%\LICENSE-ORIGINAL-MIT.txt >nul
 
 echo Built %BIN%\SpaceMonger.exe
 exit /b 0
